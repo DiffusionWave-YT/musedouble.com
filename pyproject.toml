@@ -1,0 +1,30 @@
+[project]
+name = "musedouble-local"
+version = "0.1.0"
+requires-python = ">=3.12,<3.14"
+dependencies = [
+  "fastapi==0.162.0",
+  "uvicorn==0.54.0",
+  "sqlalchemy==2.1.6",
+  "psycopg[binary]==3.3.6",
+  "alembic==1.20.1",
+  "pydantic-settings==2.16.1",
+  "httpx==0.28.1",
+  "cryptography==50.0.2",
+  "argon2-cffi==25.1.0",
+  "pillow==13.0.0",
+  "websockets==17.3",
+  "python-multipart==0.0.32",
+  "email-validator>=2.3,<3",
+  # arq 0.28.0 requires redis<6; redis 8 becomes usable when arq supports it.
+  "arq==0.28.0",
+  "redis==5.3.1",
+]
+
+[dependency-groups]
+dev = ["pytest==9.1.1", "pip-audit>=2.9,<3"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-q"

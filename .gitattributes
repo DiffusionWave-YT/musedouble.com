@@ -1,7 +1,0 @@
-* text=auto eol=lf
-# Preserve the exact original ComfyUI API workflow bytes.
-workflows/*.json -text
-*.png binary
-*.jpg binary
-*.jpeg binary
-*.webp binary
