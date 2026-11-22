@@ -1,4 +1,3 @@
-"""redis_queue_and_rate_limits: jobs.enqueued_at; rate limits move to Redis."""
 from alembic import op
 import sqlalchemy as sa
 
@@ -9,7 +8,6 @@ depends_on = None
 
 
 def upgrade():
-    # NULL means "never handed to Redis": the sweeper picks such queued jobs up.
     op.add_column('jobs', sa.Column('enqueued_at', sa.DateTime(timezone=True), nullable=True))
     op.drop_table('rate_events')
 

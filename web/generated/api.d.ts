@@ -209,6 +209,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/outputs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Gallery */
+        get: operations["gallery_api_v1_outputs_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/settings": {
         parameters: {
             query?: never;
@@ -518,6 +535,32 @@ export interface components {
             reference: string;
             /** Note */
             note: string;
+        };
+        /** GalleryItem */
+        GalleryItem: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /** Workflow Id */
+            workflow_id: string;
+            /** Ratio */
+            ratio: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /** GalleryOut */
+        GalleryOut: {
+            /** Items */
+            items: components["schemas"]["GalleryItem"][];
+            /** Next Offset */
+            next_offset: number | null;
         };
         /** GenerationSettings */
         GenerationSettings: {
@@ -1162,6 +1205,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SignedUrlOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    gallery_api_v1_outputs_get: {
+        parameters: {
+            query?: {
+                order?: "newest" | "oldest" | "az" | "za";
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GalleryOut"];
                 };
             };
             /** @description Validation Error */

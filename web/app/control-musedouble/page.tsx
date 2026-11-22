@@ -1,2 +1,3 @@
-import Studio from "../../components/Studio";
-export default function Page(){ return <Studio control />; }
+export default function Page() {
+  return null;
+}

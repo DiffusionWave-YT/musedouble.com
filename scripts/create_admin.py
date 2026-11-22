@@ -1,4 +1,3 @@
-"""CLI-only creation of the first administrator account on a fresh installation."""
 import argparse
 import getpass
 from pathlib import Path

@@ -1,4 +1,3 @@
-"""Project-local official Node 24 LTS runtime, SHA-256 verified; no global install."""
 import hashlib
 import io
 import json

@@ -27,12 +27,9 @@ class Settings(BaseSettings):
     upload_limit: int = 20 * 1024 * 1024
     upload_daily_limit: int = 200 * 1024 * 1024
     output_limit: int = 32 * 1024 * 1024
-    # Redis: cola ARQ, límites de tasa y progreso (pub/sub). Servicio compartido:
-    # el prefijo aísla las claves de MuseDouble de otros proyectos.
     redis_url: SecretStr = SecretStr("redis://127.0.0.1:6379/0")
     redis_prefix: str = "musedouble:"
     worker_concurrency: int = 4
-    # Un trabajo queued sin reenvío a la cola se vuelve a encolar tras este plazo.
     requeue_after_seconds: int = 60
 
     @field_validator("storage")

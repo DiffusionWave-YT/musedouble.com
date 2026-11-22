@@ -37,8 +37,6 @@ def password_ok(raw: str, encoded: str) -> bool:
         return False
 
 
-# Sliding window in one atomic script: expire old events, check, then record.
-# Rejected attempts are not recorded, so a blocked client cannot extend its own block.
 _WINDOW_SCRIPT = """
 redis.call('ZREMRANGEBYSCORE', KEYS[1], 0, tonumber(ARGV[1]) - tonumber(ARGV[2]))
 if redis.call('ZCARD', KEYS[1]) >= tonumber(ARGV[3]) then
@@ -53,7 +51,6 @@ _window = None
 
 
 def rate_limit(scope: str, key: str, limit: int, seconds: int):
-    """Sliding window stored in Redis. Redis errors surface as 503 (see app/main.py)."""
     global _window
     hashed = digest(scope + ":" + key)
     now_ms = int(time.time() * 1000)
@@ -67,7 +64,6 @@ def rate_limit(scope: str, key: str, limit: int, seconds: int):
 
 
 def ip_of(request: Request) -> str:
-    # Forwarded headers are not trusted; the local proxy connects through loopback.
     return request.client.host if request.client else "unknown"
 
 

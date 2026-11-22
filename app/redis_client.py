@@ -1,9 +1,3 @@
-"""Redis access: queue transport, rate limits and progress events.
-
-Redis is never the source of truth. Jobs, credits and results live in PostgreSQL;
-Redis only transports work and holds short-lived counters. Every key carries the
-configured prefix because the server may be shared with other projects.
-"""
 import threading
 import redis
 from app.config import settings

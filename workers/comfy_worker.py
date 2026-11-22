@@ -1,4 +1,3 @@
-"""Durable PostgreSQL queue; restartable, fenced leases, GPU claims and exact-once refunds."""
 import hashlib
 import json
 import logging
@@ -54,7 +53,6 @@ class Worker:
                     finish(db, job, "failed", "No se pudo recuperar la generación. Tus créditos fueron devueltos.")
                 else:
                     job.status, job.worker_id = "queued", None
-                    # Keep the GPU reserved when a prompt may already exist; never resubmit it.
                     if job.dispatch_state == "not_sent" and job.gpu_server_id:
                         gpu = db.get(GpuServer, job.gpu_server_id)
                         if gpu.busy_job_id == job.id:
@@ -69,7 +67,6 @@ class Worker:
     def claim(self, job_id=None):
         scope = [Job.id == job_id] if job_id else []
         with SessionLocal.begin() as db:
-            # Apply availability before LIMIT so a backlog for GPU A cannot hide GPU B's jobs.
             usable = select(GpuServer.id).join(GpuWorkflow, GpuWorkflow.gpu_id == GpuServer.id).where(
                 GpuWorkflow.workflow_id == Job.workflow_id, GpuServer.enabled, GpuServer.healthy,
                 GpuServer.last_seen > now() - timedelta(seconds=60)).correlate(Job)
@@ -128,7 +125,6 @@ class Worker:
                 log.warning("heartbeat_failed job=%s", job_id)
 
     def health_while_running(self, stop, interval=20):
-        # Generation can take minutes. Keep health fresh independently of job heartbeats.
         while not stop.wait(interval):
             try:
                 self.health()
@@ -157,7 +153,6 @@ class Worker:
                                     Job.status == "running").values(progress=percent))
                             colas.publish(job.user_id, SimpleNamespace(id=job.id, status="running", progress=percent))
         except Exception:
-            # History remains authoritative when a TLS/websocket implementation differs.
             log.info("websocket_fallback job=%s", job.id)
 
     def reconcile(self, client, job):
@@ -274,7 +269,6 @@ class Worker:
                     finish(db, row, "failed", message)
         except Exception as exc:
             log.error("worker_error job=%s type=%s stack=%s", job_id, type(exc).__name__, "".join(traceback.format_tb(exc.__traceback__)))
-            # Leave a durable lease for recovery; never guess whether /prompt was accepted.
         finally:
             stop.set()
             heartbeat.join(timeout=6)
@@ -319,7 +313,6 @@ class Worker:
             finish(db, row, "canceled" if row.cancel_requested else "succeeded")
 
     def run_queued(self, job_id):
-        """ARQ entry point. Returns 'done', 'waiting' (GPU busy, retry later) or 'skipped'."""
         job_uuid = uuid.UUID(job_id)
         if self.claim(job_uuid) is None:
             with SessionLocal() as db:
@@ -329,7 +322,6 @@ class Worker:
         return "done"
 
     def sweep(self):
-        """Periodic repair: expire dead leases and hand stale queued jobs to Redis again."""
         if time.monotonic() - self.last_health > 20:
             self.health()
         self.recover()
@@ -337,7 +329,6 @@ class Worker:
             colas.hand_to_queue(job_id)
 
     def tick(self):
-        """Synchronous single step used by tests and maintenance: recover, claim any job, run it."""
         if time.monotonic() - self.last_health > 20:
             self.health()
         self.recover()

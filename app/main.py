@@ -35,7 +35,6 @@ def health():
             db.execute(text("SELECT 1"))
     except SQLAlchemyError:
         return JSONResponse({"ok": False, "queue": ping()}, status_code=503)
-    # Redis is reported but does not fail the probe: PostgreSQL remains the source of truth.
     return {"ok": True, "queue": ping()}
 
 
@@ -52,7 +51,6 @@ async def conflict(request: Request, exc):
 
 @app.exception_handler(RedisError)
 async def queue_unavailable(request: Request, exc):
-    # Redis carries limits and the queue; without it the API must not accept work.
     log.warning("redis_unavailable type=%s", type(exc).__name__)
     return JSONResponse({"detail": "El servicio de cola no está disponible. Vuelve a intentarlo en unos segundos."},
                         status_code=503, headers={"Retry-After": "5"})
@@ -67,13 +65,11 @@ async def saturated(request: Request, exc):
 @app.exception_handler(Exception)
 async def unhandled(request: Request, exc):
     request_id = getattr(request.state, "request_id", "unknown")
-    # Avoid exception strings: DB parameters and HTTP clients may contain secrets.
     log.error("request_failed request_id=%s type=%s stack=%s", request_id, type(exc).__name__, "".join(traceback.format_tb(exc.__traceback__)))
     return JSONResponse({"detail": "No se pudo completar la solicitud.", "request_id": request_id}, status_code=500)
 
 
 class Boundary:
-    """Bound bodies before multipart/JSON parsing, request IDs, private response headers."""
     def __init__(self, application):
         self.app = application
 

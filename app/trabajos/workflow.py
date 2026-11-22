@@ -1,4 +1,3 @@
-"""The API graph is immutable except for explicitly named input nodes."""
 import copy
 import re
 from fastapi import HTTPException

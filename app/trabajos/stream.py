@@ -1,9 +1,3 @@
-"""WebSocket de progreso para el navegador.
-
-Cada pestaña abierta recibe los eventos de sus propios trabajos desde Redis
-pub/sub. Es solo una notificación: el estado definitivo siempre se consulta en
-GET /jobs/{id}. Sin WebSocket, la consola puede seguir consultando.
-"""
 import asyncio
 import time
 from fastapi import APIRouter, HTTPException, WebSocket
@@ -34,7 +28,6 @@ def _session_user(token: str):
 @router.websocket("/jobs/stream")
 async def job_stream(websocket: WebSocket):
     origin = websocket.headers.get("origin")
-    # Cross-site WebSocket hijacking: only the configured web origin may open the stream.
     if origin and origin.rstrip("/") != settings().web_origin.rstrip("/"):
         await websocket.close(code=POLICY_VIOLATION)
         return
@@ -60,13 +53,11 @@ async def job_stream(websocket: WebSocket):
                 await websocket.send_text(message["data"])
             if time.monotonic() - checked > RECHECK_SECONDS:
                 checked = time.monotonic()
-                # Revoked or expired sessions stop receiving events.
                 if await run_in_threadpool(_session_user, websocket.cookies.get(COOKIE, "")) != user_id:
                     await websocket.close(code=POLICY_VIOLATION)
                     return
             await asyncio.sleep(0)
     except Exception:
-        # Client disconnected or Redis failed: the browser falls back to polling GET /jobs.
         return
     finally:
         await pubsub.aclose()

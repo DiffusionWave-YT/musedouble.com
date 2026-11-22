@@ -46,11 +46,9 @@ def environment(monkeypatch):
     monkeypatch.setattr(users_module, "SecuritySessionLocal", security_sessions)
     monkeypatch.setattr(worker_module, "SessionLocal", sessions)
     monkeypatch.setattr(settings(), "storage", ROOT / "storage/tests" / schema)
-    # Every test gets its own Redis key namespace; the server may be shared with other projects.
     redis_prefix = "test:" + uuid.uuid4().hex + ":"
     monkeypatch.setattr(settings(), "redis_prefix", redis_prefix)
     handed = []
-    # Queue transport is recorded here; real Redis handoff is tested separately.
     monkeypatch.setattr(colas._bridge, "enqueue", lambda job_id: handed.append(job_id))
     image = io.BytesIO()
     Image.new("RGB", (32, 40), "#bbc4d3").save(image, format="PNG")
@@ -161,7 +159,6 @@ def environment(monkeypatch):
             return r
 
     yield {"sessions": sessions, "worker": worker, "state": state, "ids": ids, "Client": Client, "image": image.getvalue(), "engine": engine, "handed": handed, "prefix": redis_prefix}
-    # Cleanup uses its own connection: a test may have replaced the shared client.
     cleanup = redis.Redis.from_url(settings().redis_url.get_secret_value(), decode_responses=True)
     for name in cleanup.scan_iter(match=redis_prefix + "*", count=500):
         cleanup.delete(name)
@@ -172,6 +169,5 @@ def environment(monkeypatch):
     security_engine.dispose()
     owner_test.dispose()
     with owner.begin() as db:
-        # Schema is a generated hex identifier, never request data or a production schema.
         db.execute(text(f'DROP SCHEMA "{schema}" CASCADE'))
     owner.dispose()

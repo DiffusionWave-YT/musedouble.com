@@ -1,9 +1,3 @@
-"""Proceso de trabajos ARQ. Arranque: `python -m arq workers.arq_worker.WorkerSettings`.
-
-Cada mensaje de Redis lleva solo el identificador de un trabajo. La decisión de
-ejecutar, el reclamo de la GPU y el reembolso siguen en PostgreSQL, así que un
-mensaje duplicado o tardío no puede generar dos veces.
-"""
 import asyncio
 from arq import cron
 from arq.connections import RedisSettings
@@ -23,7 +17,6 @@ async def startup(ctx):
 async def run_job(ctx, job_id: str):
     outcome = await asyncio.to_thread(ctx["worker"].run_queued, job_id)
     if outcome == "waiting":
-        # The GPU is busy or not yet claimable: try again shortly. The job stays queued in PostgreSQL.
         raise Retry(defer=RETRY_SECONDS)
     return outcome
 

@@ -1,4 +1,3 @@
-"""Worker-only ComfyUI transport. URLs/tokens never appear in public responses or logs."""
 import json
 import os
 import shutil
@@ -39,8 +38,6 @@ class ComfyClient:
 
     def request(self, path, method="GET", body=None, upload=None, limit=4 * 1024 * 1024):
         try:
-            # Schannel validates the original underscore-host certificate using Windows trust.
-            # No -k, custom hostname override or disabled certificate verification is used.
             if os.name == "nt" and shutil.which("curl.exe") and upload is None:
                 config = ["url = " + json.dumps(self.url + path), "request = " + json.dumps(method),
                           'silent', 'show-error', 'fail-with-body', 'connect-timeout = 5', 'max-time = 45',
@@ -88,7 +85,6 @@ class ComfyClient:
 
     def upload(self, name, data, mime):
         if os.name == "nt" and shutil.which("curl.exe"):
-            # Curl gets URL, header and binary multipart through a private config/body file.
             import secrets
             from app.archivos.storage import save_object, object_path
             boundary = "----musedouble" + secrets.token_hex(16)

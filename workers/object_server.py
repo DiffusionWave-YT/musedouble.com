@@ -1,4 +1,3 @@
-"""Private local object delivery process; accepts only short-lived HMAC URLs."""
 import hmac
 import time
 from fastapi import FastAPI, HTTPException

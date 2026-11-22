@@ -1,4 +1,3 @@
-"""Create an isolated loopback-only PostgreSQL cluster. Never touches existing services."""
 import json
 import os
 from pathlib import Path
@@ -21,7 +20,6 @@ secrets_file = runtime / "local-database.json"
 
 
 def run(args):
-    # PostgreSQL children inherit file handles on Windows; never give a daemon a pipe.
     with (runtime / "setup.log").open("a", encoding="utf-8") as output:
         p = subprocess.run([str(a) for a in args], stdout=output, stderr=output, creationflags=flags, timeout=60)
     if p.returncode:

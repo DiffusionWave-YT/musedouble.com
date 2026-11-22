@@ -1,13 +1,3 @@
-"""Cola ARQ sobre Redis y publicación de progreso.
-
-PostgreSQL decide qué trabajo existe y en qué estado está. Redis solo transporta
-el identificador hacia un worker; si Redis pierde ese mensaje, el barrido del
-worker vuelve a encolar los `queued` desde PostgreSQL.
-
-Las rutas síncronas de FastAPI llaman a ARQ, que es asíncrono. Un hilo dedicado
-con su propio bucle mantiene un único pool de conexiones en lugar de abrir uno
-por petición.
-"""
 import asyncio
 import json
 import logging
@@ -56,7 +46,6 @@ class _Bridge:
         try:
             future.result(timeout=5)
         except Exception:
-            # Drop the pool so the next call reconnects; the sweeper repairs the lost message.
             self._pool = None
             raise
 
@@ -65,7 +54,6 @@ _bridge = _Bridge()
 
 
 def hand_to_queue(job_id) -> bool:
-    """Send one job id to Redis and record when. Returns False if the handoff failed."""
     try:
         _bridge.enqueue(str(job_id))
     except Exception:
@@ -77,7 +65,6 @@ def hand_to_queue(job_id) -> bool:
 
 
 def schedule_handoff(session, job_id) -> None:
-    """Hand the job to Redis only after the creating transaction commits."""
     after_commit(session, lambda: hand_to_queue(job_id))
 
 
@@ -89,7 +76,6 @@ def stale_queued_ids(limit: int = 100):
 
 
 def publish(user_id, job) -> None:
-    """Progress event for the owner's open browser tabs. Contains no URLs, IDs of ComfyUI or prompts."""
     payload = {"job_id": str(job.id), "status": job.status, "progress": job.progress}
     try:
         redis_client.client().publish(redis_client.progress_channel(user_id), json.dumps(payload))

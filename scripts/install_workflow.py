@@ -1,4 +1,3 @@
-"""Install a user-supplied API workflow locally, preserving exact source bytes and history."""
 import argparse
 import hashlib
 import json

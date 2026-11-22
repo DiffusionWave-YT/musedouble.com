@@ -1,13 +1,14 @@
 import uuid
 from datetime import timedelta
-from fastapi import APIRouter, Depends, HTTPException, UploadFile
+from typing import Literal
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 from app.config import settings
 from app.db import database
 from app.models import Job, Output, Upload, User, now
 from app.security import csrf, current_user, rate_limit
-from app.schemas import SignedUrlOut
+from app.schemas import GalleryOut, SignedUrlOut
 from app.archivos.storage import inspect_image, save_object, signed_url
 
 router = APIRouter(tags=["archivos"])
@@ -40,3 +41,24 @@ def output_url(output_id: uuid.UUID, download: bool = False, user: User = Depend
     if not row:
         raise HTTPException(404, "Archivo no encontrado.")
     return signed_url(row.object_key, download)
+
+
+ORDERS = {
+    "newest": lambda: (Output.created_at.desc(), Output.id),
+    "oldest": lambda: (Output.created_at.asc(), Output.id),
+    "az": lambda: (Job.model_name.collate("es-x-icu").asc(), Output.created_at.desc(), Output.id),
+    "za": lambda: (Job.model_name.collate("es-x-icu").desc(), Output.created_at.desc(), Output.id),
+}
+
+
+@router.get("/outputs", response_model=GalleryOut)
+def gallery(order: Literal["newest", "oldest", "az", "za"] = "newest", limit: int = Query(40, ge=1, le=100),
+            offset: int = Query(0, ge=0, le=10000), user: User = Depends(current_user),
+            db: Session = Depends(database, scope="function")):
+    rows = db.execute(select(Output.id, Output.created_at, Job.model_name, Job.workflow_id, Job.params)
+                      .join(Job, Job.id == Output.job_id)
+                      .where(Output.user_id == user.id, Job.status == "succeeded")
+                      .order_by(*ORDERS[order]()).offset(offset).limit(limit)).all()
+    items = [{"id": r.id, "name": r.model_name, "workflow_id": r.workflow_id,
+              "ratio": r.params.get("ratio"), "created_at": r.created_at} for r in rows]
+    return {"items": items, "next_offset": offset + len(rows) if len(rows) == limit else None}

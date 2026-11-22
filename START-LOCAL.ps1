@@ -26,7 +26,6 @@ uv run python scripts/grant_database.py
 if ($LASTEXITCODE -ne 0) { throw 'No se pudieron preparar los permisos.' }
 $pythonExe = Join-Path $PSScriptRoot '.venv/Scripts/python.exe'
 $launchers = @(
-    # Redis (WSL) debe estar listo antes que la API y el worker. Se instala con scripts/setup-redis-wsl.ps1.
     @{name='redis'; exe=(Get-Command wsl.exe).Source; args='-d Ubuntu-22.04 -- bash -lc "exec $HOME/musedouble-redis/bin/redis-server $HOME/musedouble-redis/redis.conf"'; dir=$PSScriptRoot},
     @{name='api'; exe=$pythonExe; args='-m uvicorn app.main:application --host 127.0.0.1 --port 8010 --no-server-header --no-access-log'; dir=$PSScriptRoot},
     @{name='objects'; exe=$pythonExe; args='-m uvicorn workers.object_server:app --host 127.0.0.1 --port 9011 --no-server-header --no-access-log'; dir=$PSScriptRoot},

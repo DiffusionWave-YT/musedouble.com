@@ -129,7 +129,6 @@ class Job(Base):
     error_public: Mapped[str | None] = mapped_column(String(200))
     heartbeat_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
-    # Last time this job was handed to Redis; the sweeper requeues stale queued jobs.
     enqueued_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

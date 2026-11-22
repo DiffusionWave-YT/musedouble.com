@@ -1,4 +1,3 @@
-"""Local PostgreSQL custom-format backup; credentials only in the child environment."""
 import os
 from pathlib import Path
 import subprocess
@@ -29,8 +28,6 @@ def backup():
         creationflags=subprocess.CREATE_NO_WINDOW if os.name=="nt" else 0)
     if result.returncode:
         raise SystemExit("No se pudo crear el respaldo PostgreSQL.")
-    # Objects are immutable and retained: copying after the DB snapshot includes every
-    # object referenced by the dump, and can harmlessly include newer unreferenced files.
     bundle=dest.with_suffix(".objects.tar.gz")
     manifest={}
     objects=ROOT/"storage/objects"

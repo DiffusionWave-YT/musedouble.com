@@ -149,6 +149,19 @@ class JobListOut(BaseModel):
     next_offset: int | None
 
 
+class GalleryItem(BaseModel):
+    id: UUID
+    name: str
+    workflow_id: str
+    ratio: str | None
+    created_at: datetime
+
+
+class GalleryOut(BaseModel):
+    items: list[GalleryItem]
+    next_offset: int | None
+
+
 class SignedUrlOut(BaseModel):
     url: str
     expires_at: int

@@ -304,7 +304,6 @@ def test_password_change_revokes_concurrent_old_password_login(environment,monke
             login_checked.set();assert release.wait(5)
         return result
     monkeypatch.setattr(users_module,"password_ok",delayed)
-    # TestClient executes sync endpoints in its threadpool; use the first verification as the gate.
     first_lock=threading.Lock();first={"done":False}
     def gated(raw,encoded):
         result=real(raw,encoded)
@@ -408,3 +407,20 @@ def test_remapped_graphs_and_immutable_output(environment):
             validate_graph(broken,mode);assert False
         except HTTPException:
             pass
+
+
+def test_gallery_is_ordered_by_server_and_private(environment):
+    env=environment
+    owner=env["Client"]("member_one");other=env["Client"]("member_two");anon=env["Client"]()
+    for _ in range(2):
+        assert enqueue(owner).status_code==202
+        env["worker"].tick()
+    newest=owner.call("/outputs?order=newest").json()["items"]
+    oldest=owner.call("/outputs?order=oldest").json()["items"]
+    assert len(newest)==2 and [i["id"] for i in newest]==[i["id"] for i in reversed(oldest)]
+    assert owner.call("/outputs?order=az").status_code==200 and owner.call("/outputs?order=za").status_code==200
+    assert owner.call("/outputs?order=random").status_code==422
+    assert other.call("/outputs").json()["items"]==[]
+    assert anon.call("/outputs").status_code==401
+    page=owner.call("/outputs?limit=1").json()
+    assert len(page["items"])==1 and page["next_offset"]==1

@@ -83,7 +83,6 @@ def enqueue(db, user, payload, request_key):
     db.add(job)
     db.flush()
     db.add(CreditEntry(user_id=user.id, delta=-cost, reason="job", job_id=job.id, reference=f"job-{job.id}"))
-    # API never calls ComfyUI. Health is maintained by workers.
     available = db.scalar(select(GpuServer.id).join(GpuWorkflow, GpuWorkflow.gpu_id == GpuServer.id).where(
         GpuWorkflow.workflow_id == wf.id, GpuServer.enabled, GpuServer.healthy,
         GpuServer.last_seen > now() - timedelta(seconds=60)).limit(1))

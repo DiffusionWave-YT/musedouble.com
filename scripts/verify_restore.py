@@ -1,4 +1,3 @@
-"""Restore a backup into a newly generated disposable local database and compare counts."""
 import json
 import os
 from pathlib import Path
