@@ -16,3 +16,5 @@ web/.next/
 web/.env*
 web/tsconfig.tsbuildinfo
 *.log
+*.md
+AGENTS.md
