@@ -1,25 +1,63 @@
 "use client";
 import { useEffect, useState, type FormEvent } from "react";
-import { api, type GenerationLimits, type Model, type User } from "../lib/api";
+import { api, type GenerationLimits } from "../lib/api";
+import Characters from "./admin/Characters";
+import Generations from "./admin/Generations";
+import { UserDetail, Users } from "./admin/Users";
+import Workflows from "./admin/Workflows";
 import { Action, Empty, Icon } from "./ui";
 
-type Props={tab:string,notify:(s:string)=>void,changed:()=>void};
-type Gpu={id:string,name:string,url_masked:string,has_token:boolean,enabled:boolean,healthy:boolean,exclusive:boolean,busy:boolean,workflow_ids:string[]};
-type Workflow={id:string,name:string,mode:string,cost:number,enabled:boolean,version:number,sha256:string};
-type Member=User&{credits:number};
+type Props = { tab: string; memberId: string; notify: (s: string) => void; changed: () => void };
+type Gpu = { id: string; name: string; url_masked: string; has_token: boolean; enabled: boolean; healthy: boolean; exclusive: boolean; busy: boolean; workflow_ids: string[] };
+type Overview = Record<"users" | "models" | "outputs" | "queued" | "running" | "succeeded" | "failed", number>;
+type Entry = { id: number; action: string; target: string; created_at: string };
 
-export default function Administration({tab,notify,changed}:Props){
-  const [data,setData]=useState<Record<string,unknown>|null>(null);const [version,setVersion]=useState(0);const [loading,setLoading]=useState(false);
-  const reload=()=>{setVersion(n=>n+1);changed();};
-  useEffect(()=>{let stopped=false;setLoading(true);api<Record<string,unknown>>("/admin/"+(tab==="overview"?"overview":tab)).then(d=>{if(!stopped)setData(d);}).catch(e=>notify(e.message)).finally(()=>{if(!stopped)setLoading(false);});return()=>{stopped=true;};},[tab,version]);
-  const items=(data?.items||[]) as unknown[];
-  return <>{loading&&<p role="status">Cargando…</p>}{tab==="overview"&&data&&<><div className="stats">{[["Usuarios",data.users],["Modelos",data.models],["En cola",data.queued],["Generando",data.running],["Completados",data.succeeded]].map(([n,v])=><section className="stat" key={String(n)}><span>{String(n)}</span><strong>{String(v)}</strong></section>)}</div></>}
-    {tab==="models"&&<><div className="admin-list">{(items as Model[]).map(m=><ModelEditor key={m.id+version} model={m} notify={notify} saved={reload}/>)}</div><ModelEditor key={"new"+version} notify={notify} saved={reload}/></>}
-    {tab==="workflows"&&<div className="admin-list"><GenerationSettings notify={notify} saved={reload}/>{(items as Workflow[]).map(w=><WorkflowEditor key={w.id+version} workflow={w} notify={notify} saved={reload}/>)}</div>}
-    {tab==="gpus"&&<><div className="admin-list">{(items as Gpu[]).map(g=><GpuEditor key={g.id+version} gpu={g} notify={notify} saved={reload}/>)}</div><GpuEditor key={"new"+version} notify={notify} saved={reload}/></>}
-    {tab==="users"&&<div className="admin-list">{(items as Member[]).map(u=><UserRow key={u.id+version} member={u} notify={notify} saved={reload}/>)}</div>}
-    {tab==="audit"&&<section className="panel table-scroll"><table><thead><tr><th>Acción</th><th>Registro</th><th>Fecha</th></tr></thead><tbody>{(items as {id:number,action:string,target:string,created_at:string}[]).map(a=><tr key={a.id}><td>{a.action}</td><td className="subtle">{a.target}</td><td>{new Date(a.created_at).toLocaleString("es")}</td></tr>)}</tbody></table>{!items.length&&<Empty title="Aún no hay actividad." text="Las acciones de administración aparecerán aquí."/>}</section>}
-  </>;
+const figures: [keyof Overview, string][] = [
+  ["users", "Usuarios"], ["models", "Personajes"], ["queued", "En cola"], ["running", "Generando"],
+  ["succeeded", "Completadas"], ["failed", "No completadas"], ["outputs", "Imágenes creadas"],
+];
+
+function Summary({ notify }: { notify: (s: string) => void }) {
+  const [data, setData] = useState<Overview | null>(null);
+  useEffect(() => { api<Overview>("/admin/overview").then(setData).catch(e => notify(e.message)); }, [notify]);
+  if (!data) return <p role="status">Cargando…</p>;
+  return <div className="stats">{figures.map(([key, name]) => <section className="stat" key={key}><span>{name}</span><strong>{data[key]}</strong></section>)}</div>;
+}
+
+function Servers({ notify, changed }: { notify: (s: string) => void; changed: () => void }) {
+  const [items, setItems] = useState<Gpu[] | null>(null);
+  const [version, setVersion] = useState(0);
+  useEffect(() => { api<{ items: Gpu[] }>("/admin/gpus").then(d => setItems(d.items)).catch(e => notify(e.message)); }, [version, notify]);
+  const saved = () => { setVersion(n => n + 1); changed(); };
+  if (!items) return <p role="status">Cargando…</p>;
+  return <><div className="admin-list">{items.map(g => <GpuEditor key={g.id + version} gpu={g} notify={notify} saved={saved} />)}</div><GpuEditor key={"new" + version} notify={notify} saved={saved} /></>;
+}
+
+function Activity({ notify }: { notify: (s: string) => void }) {
+  const [items, setItems] = useState<Entry[] | null>(null);
+  useEffect(() => { api<{ items: Entry[] }>("/admin/audit").then(d => setItems(d.items)).catch(e => notify(e.message)); }, [notify]);
+  if (!items) return <p role="status">Cargando…</p>;
+  return (
+    <section className="panel table-scroll">
+      <table><thead><tr><th>Acción</th><th>Registro</th><th>Fecha</th></tr></thead>
+        <tbody>{items.map(a => <tr key={a.id}><td>{a.action}</td><td className="subtle">{a.target}</td><td>{new Date(a.created_at).toLocaleString("es")}</td></tr>)}</tbody></table>
+      {!items.length && <Empty title="Aún no hay actividad." text="Las acciones de administración aparecerán aquí." />}
+    </section>
+  );
+}
+
+export default function Administration({ tab, memberId, notify, changed }: Props) {
+  return (
+    <>
+      {tab === "overview" && <Summary notify={notify} />}
+      {tab === "characters" && <Characters notify={notify} changed={changed} />}
+      {tab === "workflows" && <Workflows notify={notify} changed={changed}><GenerationSettings notify={notify} saved={changed} /></Workflows>}
+      {tab === "users" && (memberId ? <UserDetail id={memberId} notify={notify} changed={changed} /> : <Users notify={notify} />)}
+      {tab === "generations" && <Generations notify={notify} />}
+      {tab === "gpus" && <Servers notify={notify} changed={changed} />}
+      {tab === "audit" && <Activity notify={notify} />}
+    </>
+  );
 }
 
 type Editor={notify:(s:string)=>void,saved:()=>void};
@@ -29,20 +67,6 @@ function GenerationSettings({notify,saved}:Editor){
   async function submit(e:FormEvent<HTMLFormElement>){e.preventDefault();setBusy(true);const fd=new FormData(e.currentTarget);try{const result=await api<GenerationLimits>("/admin/settings",{method:"PUT",body:JSON.stringify({max_batch:Number(fd.get("max_batch")),ratios:fd.getAll("ratios")})});setData(result);notify("Límites de generación guardados.");saved();}catch(e){notify((e as Error).message);}finally{setBusy(false);}}
   return <section className="panel"><h2>Límites de generación</h2>{data&&<form onSubmit={submit}><label>Máximo por envío<select name="max_batch" defaultValue={data.max_batch}><option value="1">1 imagen</option><option value="2">2 imágenes</option></select></label><fieldset className="ratio-options"><legend>Formatos disponibles</legend>{["4:5","5:4","1:1","9:16","16:9"].map(r=><label className="check" key={r}><input name="ratios" type="checkbox" value={r} defaultChecked={data.ratios.includes(r as GenerationLimits["ratios"][number])}/>{r}</label>)}</fieldset><button className="primary" disabled={busy}><Action icon="check">{busy?"Guardando…":"Guardar límites"}</Action></button></form>}</section>;
 }
-function ModelEditor({model,notify,saved}:Editor&{model?:Model}){
-  const [busy,setBusy]=useState(false);
-  async function submit(e:FormEvent<HTMLFormElement>){e.preventDefault();setBusy(true);const fd=new FormData(e.currentTarget);const loras=Array.from({length:6},(_,i)=>({name:String(fd.get("lora-"+i)||"").trim(),strength:Number(fd.get("strength-"+i)||1)})).filter(l=>l.name);
-    const data={id:fd.get("id"),name:fd.get("name"),character_prompt:fd.get("character_prompt"),eye_prompt:fd.get("eye_prompt"),active:fd.get("active")==="on",loras};
-    try{await api("/admin/models",{method:"PUT",body:JSON.stringify(data)});notify("Modelo guardado.");saved();}catch(e){notify((e as Error).message);}finally{setBusy(false);}}
-  return <details className="panel editor" open={!model}><summary><div><h2>{model?.name||"Añadir modelo"}</h2><small>{model?(model.active?"Disponible en el estudio":"Oculto en el estudio"):"Un perfil nuevo para tu selector de modelos"}</small></div><span className="chevron" aria-hidden="true"><Icon name="chevron-abajo"/></span></summary><form onSubmit={submit}><div className="field-pair"><label>Nombre<input name="name" defaultValue={model?.name} required maxLength={120}/></label><label>Identificador<input name="id" defaultValue={model?.id} required pattern="[a-zA-Z0-9_-]{1,80}" readOnly={!!model}/></label></div><label>Descripción del personaje<textarea name="character_prompt" defaultValue={model?.character_prompt} rows={3} maxLength={4000}/></label><label>Descripción de ojos<input name="eye_prompt" defaultValue={model?.eye_prompt} maxLength={1000}/></label><fieldset><legend>LoRAs del modelo</legend>{Array.from({length:6},(_,i)=><div className="lora-row" key={i}><label>LoRA {i+1}<input name={"lora-"+i} defaultValue={model?.loras?.[i]?.name} maxLength={200}/></label><label>Intensidad<input name={"strength-"+i} type="number" min={-2} max={2} step={0.05} defaultValue={model?.loras?.[i]?.strength??1}/></label></div>)}</fieldset><label className="check"><input name="active" type="checkbox" defaultChecked={model?.active??true}/>Mostrar en el estudio</label><button className="primary" disabled={busy}><Action icon="check">{busy?"Guardando…":"Guardar modelo"}</Action></button></form></details>;
-}
-
-function WorkflowEditor({workflow:w,notify,saved}:Editor&{workflow:Workflow}){
-  const [busy,setBusy]=useState(false);
-  async function submit(e:FormEvent<HTMLFormElement>){e.preventDefault();setBusy(true);const fd=new FormData(e.currentTarget);fd.set("enabled",fd.get("enabled")==="on"?"true":"false");try{await api("/admin/workflows/"+w.id,{method:"PUT",body:fd});notify("Workflow validado y guardado.");saved();}catch(e){notify((e as Error).message);}finally{setBusy(false);}}
-  return <section className="panel"><div className="section-heading"><h2>{w.name}</h2><span className="status">Versión {w.version}</span></div><form onSubmit={submit}><input type="hidden" name="mode" value={w.mode}/><div className="field-pair"><label>Nombre<input name="name" defaultValue={w.name} required maxLength={120}/></label><label>Créditos por imagen<input type="number" name="cost" min={1} max={10000} defaultValue={w.cost} required/></label></div><label>Nuevo workflow API JSON<input type="file" name="file" accept="application/json,.json" required/></label><label className="check"><input name="enabled" type="checkbox" defaultChecked={w.enabled}/>Herramienta disponible</label><button className="primary" disabled={busy}><Action icon="check">{busy?"Validando…":"Validar y guardar workflow"}</Action></button></form></section>;
-}
-
 function GpuEditor({gpu,notify,saved}:Editor&{gpu?:Gpu}){
   const [busy,setBusy]=useState(false);const [loras,setLoras]=useState<string[]>([]);
   const [compatibility,setCompatibility]=useState<{compatible:boolean,missing_nodes:string[],invalid_inputs:{node:string,input:string,message:string}[]}|null>(null);
@@ -54,10 +78,3 @@ function GpuEditor({gpu,notify,saved}:Editor&{gpu?:Gpu}){
   return <details className="panel editor" open={!gpu}><summary><div><h2>{gpu?.name||"Añadir servidor"}</h2><small>{gpu?(gpu.healthy?"Conexión disponible":"Sin conexión confirmada"):"Conecta un motor ComfyUI"}{gpu?.busy?" · En uso":""}</small></div><span className="chevron" aria-hidden="true"><Icon name="chevron-abajo"/></span></summary><form onSubmit={submit}><label>Nombre<input name="name" defaultValue={gpu?.name} required maxLength={100}/></label><label>{gpu?"Reemplazar dirección del servidor":"Dirección del servidor"}<input name="url" type="text" autoComplete="off" placeholder={gpu?.url_masked} required={!gpu} maxLength={1000}/></label><label>{gpu?.has_token?"Reemplazar token de acceso":"Token de acceso (opcional)"}<input name="token" type="password" autoComplete="new-password" maxLength={2000}/></label>{gpu?.has_token&&<label className="check"><input type="checkbox" name="clear_token"/>Eliminar el token guardado</label>}<div className="field-pair">{["generate","reference"].map(id=><label key={id} className="check"><input type="checkbox" name="workflow_ids" value={id} defaultChecked={gpu?gpu.workflow_ids.includes(id):true}/>{id==="generate"?"Crear imagen":"Imagen de referencia"}</label>)}</div><label className="check"><input name="enabled" type="checkbox" defaultChecked={gpu?.enabled??true}/>Servidor habilitado</label><label className="check"><input name="exclusive" type="checkbox" defaultChecked={gpu?.exclusive??false}/>Servidor dedicado exclusivamente a esta web</label><button className="primary" disabled={busy}><Action icon="check">{busy?"Un momento…":"Guardar servidor"}</Action></button></form>{gpu&&<div className="button-row"><button onClick={test} disabled={busy}><Action icon="refrescar">Probar conexión</Action></button><button onClick={list} disabled={busy}><Action icon="buscar">Consultar LoRAs</Action></button><button onClick={()=>validate("generate")} disabled={busy}><Action icon="check">Revisar generación</Action></button><button onClick={()=>validate("reference")} disabled={busy}><Action icon="check">Revisar referencia</Action></button></div>}{loras.length>0&&<label className="lora-select">LoRAs disponibles<select>{loras.map(l=><option key={l}>{l}</option>)}</select></label>}{compatibility&&<div className="compatibility" role="status"><h3>{compatibility.compatible?"Workflow compatible":"Este workflow necesita ajustes en ComfyUI"}</h3>{compatibility.missing_nodes.length>0&&<p>Faltan estos nodos: {compatibility.missing_nodes.join(", ")}</p>}{compatibility.invalid_inputs.map((i,n)=><p key={n}>{i.node} · {i.input}: {i.message}</p>)}</div>}</details>;
 }
 
-function UserRow({member:u,notify,saved}:Editor&{member:Member}){
-  const [busy,setBusy]=useState(false);const [reference,setReference]=useState(()=>crypto.randomUUID());
-  async function access(){setBusy(true);try{await api("/admin/users/"+u.id,{method:"PATCH",body:JSON.stringify({active:u.active,can_generate:!u.can_generate})});notify("Acceso actualizado.");saved();}catch(e){notify((e as Error).message);}finally{setBusy(false);}}
-  async function block(){setBusy(true);try{await api("/admin/users/"+u.id,{method:"PATCH",body:JSON.stringify({active:!u.active,can_generate:u.can_generate})});notify("Estado de la cuenta actualizado.");saved();}catch(e){notify((e as Error).message);}finally{setBusy(false);}}
-  async function grant(e:FormEvent<HTMLFormElement>){e.preventDefault();setBusy(true);const fd=new FormData(e.currentTarget);try{await api("/admin/users/"+u.id+"/credits",{method:"POST",body:JSON.stringify({amount:Number(fd.get("amount")),note:fd.get("note"),reference})});setReference(crypto.randomUUID());notify("Créditos asignados.");saved();}catch(e){notify((e as Error).message);}finally{setBusy(false);}}
-  return <section className="panel"><div className="section-heading"><div><h2>{u.name}</h2><p className="subtle">{u.username} · {u.role==="admin"?"Administrador":u.active?"Cuenta activa":"Cuenta bloqueada"}</p></div><span className="status">{u.credits} créditos</span></div>{u.role!=="admin"&&<div className="button-row"><button onClick={access} disabled={busy}><Action icon={u.can_generate?"pausa":"check"}>{u.can_generate?"Desactivar generación":"Autorizar generación"}</Action></button><button onClick={block} disabled={busy}><Action icon={u.active?"candado":"reproducir"}>{u.active?"Bloquear cuenta":"Activar cuenta"}</Action></button></div>}<form className="credit-form" onSubmit={grant}><label>Créditos<input type="number" name="amount" min={1} max={100000} required/></label><label>Motivo<input name="note" required maxLength={200}/></label><button className="primary" disabled={busy}><Action icon="anadir">Asignar créditos</Action></button></form></section>;
-}

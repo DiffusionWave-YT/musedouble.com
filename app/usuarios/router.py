@@ -47,7 +47,7 @@ def register(data: Register, request: Request, response: Response,
              previous: LoginSession = Depends(login_session), db: Session = Depends(database, scope="function")):
     rate_limit("register", ip_of(request), 6, 3600)
     email = str(data.email).lower()
-    if db.scalar(select(User.id).where(or_(User.username == data.username, User.email == email))):
+    if db.scalar(select(User.id).where(or_(User.username.in_([data.username, email]), User.email.in_([email, data.username])))):
         raise HTTPException(409, "No se puede registrar esa cuenta. Prueba iniciar sesión.")
     user = User(username=data.username, email=email, name=data.name, password_hash=hasher.hash(data.password))
     db.add(user)

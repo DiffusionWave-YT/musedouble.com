@@ -3,7 +3,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, setCsrf, type Catalog, type Job, type Jobs, type Session } from "../lib/api";
-import { adminAccount, adminGroups, studioAccount, studioGroups } from "../lib/sections";
+import { adminAccount, adminGroups, studioAccount, studioGroups, usersPath } from "../lib/sections";
 import { Account, LoginForm } from "./Access";
 import Administration from "./Administration";
 import Gallery from "./Gallery";
@@ -17,7 +17,8 @@ export default function Studio({ control = false }: { control?: boolean }) {
   const pathname = (usePathname() || "/").replace(/\/+$/, "") || "/";
   const groups = control ? adminGroups : studioGroups;
   const account = control ? adminAccount : studioAccount;
-  const current = [...groups.flatMap(g => g.items), account].find(s => s.path === pathname) ?? groups[0].items[0];
+  const memberId = control && pathname.startsWith(usersPath + "/") ? pathname.slice(usersPath.length + 1) : "";
+  const current = [...groups.flatMap(g => g.items), account].find(s => s.path === (memberId ? usersPath : pathname)) ?? groups[0].items[0];
   const [session, setSession] = useState<Session | null>(null);
   const [ready, setReady] = useState(false);
   const [message, setMessage] = useState("");
@@ -169,7 +170,7 @@ export default function Studio({ control = false }: { control?: boolean }) {
   );
   const tab = current.id;
   const content = control && tab !== "account"
-    ? <Administration tab={tab} notify={setMessage} changed={() => setRefresh(n => n + 1)} />
+    ? <Administration tab={tab} memberId={memberId} notify={setMessage} changed={() => setRefresh(n => n + 1)} />
     : tab === "account"
       ? <Account user={user} notify={setMessage} />
       : tab === "gallery"

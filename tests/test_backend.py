@@ -424,3 +424,47 @@ def test_gallery_is_ordered_by_server_and_private(environment):
     assert anon.call("/outputs").status_code==401
     page=owner.call("/outputs?limit=1").json()
     assert len(page["items"])==1 and page["next_offset"]==1
+
+
+def test_admin_panels_list_generations_users_and_slots(environment):
+    env=environment
+    owner=env["Client"]("member_one");other=env["Client"]("member_two");admin=env["Client"]("admin_test");anon=env["Client"]()
+    assert enqueue(owner).status_code==202
+    env["worker"].tick()
+    assert enqueue(owner).status_code==202
+    for path in ("/admin/generations","/admin/overview","/admin/users","/admin/workflows","/admin/models"):
+        assert other.call(path).status_code==403 and anon.call(path).status_code==401
+    page=admin.call("/admin/generations").json()
+    assert page["total"]==2 and len(page["items"])==2
+    done=[i for i in page["items"] if i["status"]=="succeeded"][0]
+    assert done["user"]["username"]=="member_one" and done["prompt"] and len(done["outputs"])==1 and "graph" not in done
+    uid=done["user"]["id"]
+    assert admin.call("/admin/generations?status=succeeded").json()["total"]==1
+    assert admin.call("/admin/generations?user_id="+uid).json()["total"]==2
+    assert admin.call("/admin/generations?user_id="+str(env["ids"]["member_two"])).json()["total"]==0
+    assert admin.call("/admin/generations?status=bogus").status_code==422
+    assert admin.call("/admin/generations?limit=1").json()["next_offset"]==1
+    out=done["outputs"][0]["id"]
+    assert admin.call("/admin/outputs/"+out+"/url").status_code==200
+    assert other.call("/admin/outputs/"+out+"/url").status_code==403
+    assert admin.call("/admin/outputs/"+str(uuid.uuid4())+"/url").status_code==404
+    detail=admin.call("/admin/users/"+uid).json()
+    assert detail["generations"]["succeeded"]==1 and detail["generations"]["queued"]==1 and detail["ledger"]
+    assert admin.call("/admin/users/"+str(uuid.uuid4())).status_code==404
+    listed=[u for u in admin.call("/admin/users").json()["items"] if u["id"]==uid][0]
+    assert listed["generations"]["succeeded"]==1 and listed["last_generation"]
+    slots=admin.call("/admin/workflows").json()["items"]
+    assert [s["mode"] for s in slots]==["generate","reference"] and all(s["workflow"] for s in slots)
+    assert admin.call("/admin/overview").json()["outputs"]==1
+    assert admin.call("/admin/models").json()["items"][0]["generations"]==2
+
+
+def test_username_and_password_accept_symbols(environment):
+    env=environment;c=env["Client"]()
+    r=c.call("/auth/register","POST",{"username":"Ana@Casa!#","name":"Ana","email":"ana@example.com","password":"p@ss w0rd!·ñ€#long"})
+    assert r.status_code==201 and r.json()["user"]["username"]=="ana@casa!#"
+    other=env["Client"]()
+    assert other.call("/auth/login","POST",{"identity":"ANA@casa!#","password":"p@ss w0rd!·ñ€#long"}).status_code==200
+    assert env["Client"]().call("/auth/register","POST",{"username":"has space","name":"X","email":"x@example.com","password":"long-enough-password"}).status_code==422
+    clash=env["Client"]().call("/auth/register","POST",{"username":"ana@example.com","name":"Y","email":"y@example.com","password":"long-enough-password"})
+    assert clash.status_code==409

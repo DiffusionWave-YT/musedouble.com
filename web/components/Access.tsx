@@ -29,7 +29,7 @@ export function LoginForm({ control, onLogin }: { control: boolean; onLogin: (se
         {register
           ? <>
               <label>Nombre<input name="name" required maxLength={120} autoComplete="name" /></label>
-              <label>Usuario<input name="username" required pattern="[a-z0-9_]{3,40}" minLength={3} maxLength={40} autoComplete="username" /></label>
+              <label>Usuario<input name="username" required pattern="\S{3,40}" minLength={3} maxLength={40} autoComplete="username" /></label>
               <label>Correo<input type="email" name="email" required autoComplete="email" /></label>
             </>
           : <label>Usuario o correo<input name="identity" required autoComplete="username" maxLength={254} /></label>}

@@ -14,12 +14,23 @@ const base = "/control-musedouble";
 export const adminGroups: Group[] = [
   { items: [{ id: "overview", path: base, name: "Vista general", icon: "inicio", tone: "azul" }] },
   {
-    label: "Administración",
+    label: "Contenido",
     items: [
-      { id: "models", path: base + "/modelos", name: "Modelos", icon: "agente", tone: "morado" },
+      { id: "characters", path: base + "/personajes", name: "Personajes", icon: "agente", tone: "morado" },
       { id: "workflows", path: base + "/workflows", name: "Workflows", icon: "flujos", tone: "verdeazulado" },
+    ],
+  },
+  {
+    label: "Comunidad",
+    items: [
+      { id: "users", path: base + "/usuarios", name: "Usuarios", icon: "cuenta", tone: "azul" },
+      { id: "generations", path: base + "/generaciones", name: "Generaciones", icon: "imagen", tone: "coral" },
+    ],
+  },
+  {
+    label: "Sistema",
+    items: [
       { id: "gpus", path: base + "/servidores", name: "Servidores", icon: "progreso", tone: "verdeazulado" },
-      { id: "users", path: base + "/usuarios", name: "Usuarios y créditos", icon: "cuenta", tone: "azul" },
       { id: "audit", path: base + "/actividad", name: "Actividad", icon: "reloj", tone: "gris" },
     ],
   },
@@ -29,4 +40,5 @@ export const studioAccount: Section = { id: "account", path: "/cuenta", name: "M
 export const adminAccount: Section = { id: "account", path: base + "/cuenta", name: "Mi cuenta", icon: "cuenta", tone: "azul" };
 
 export const studioSlugs = ["crear", "referencia", "galeria", "cuenta"];
-export const adminSlugs = ["modelos", "workflows", "servidores", "usuarios", "actividad", "cuenta"];
+export const adminSlugs = ["personajes", "workflows", "usuarios", "generaciones", "servidores", "actividad", "cuenta"];
+export const usersPath = base + "/usuarios";

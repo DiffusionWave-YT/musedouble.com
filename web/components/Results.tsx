@@ -3,11 +3,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { api, type SignedUrl } from "../lib/api";
 import { Action } from "./ui";
 
-export function useSignedImage(id: string) {
+export function useSignedImage(id: string, scope = "") {
   const [url, setUrl] = useState("");
   const [error, setError] = useState("");
   const renewed = useRef(0);
-  const load = useCallback(() => api<SignedUrl>("/outputs/" + id + "/url").then(x => setUrl(x.url)).catch(e => setError(e.message)), [id]);
+  const load = useCallback(() => api<SignedUrl>(scope + "/outputs/" + id + "/url").then(x => setUrl(x.url)).catch(e => setError(e.message)), [id, scope]);
   useEffect(() => { load(); }, [load]);
   const failed = () => { if (renewed.current++ < 1) load(); else setError("No se pudo cargar la imagen."); };
   return { url, error, failed };

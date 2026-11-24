@@ -15,10 +15,15 @@ class Login(Input):
 
 
 class Register(Input):
-    username: str = Field(pattern=r"^[a-z0-9_]{3,40}$")
+    username: str = Field(pattern=r"^\S{3,40}$")
     name: str = Field(min_length=1, max_length=120)
     email: EmailStr
     password: str = Field(min_length=10, max_length=128)
+
+    @field_validator("username", mode="before")
+    @classmethod
+    def lowered(cls, value):
+        return value.strip().lower() if isinstance(value, str) else value
 
 
 class PasswordChange(Input):

@@ -1,20 +1,26 @@
 import hashlib
 import json
+import re
 import uuid
+from typing import Literal
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, Query
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 from app.comfy import ComfyClient, ComfyError, validate_url
 from app.creditos.service import balance
 from app.db import database
-from app.models import AppSetting, Audit, CreditEntry, GpuServer, GpuWorkflow, Job, LoginSession, ModelProfile, User, Workflow, now
+from app.models import AppSetting, Audit, CreditEntry, GpuServer, GpuWorkflow, Job, LoginSession, ModelProfile, Output, User, Workflow, now
 from app.schemas import CreditGrant, GpuInput, ModelInput, UserAccess, GenerationSettings
 from app.preferences import generation_settings
+from app.archivos.storage import save_object, signed_url
 from app.security import admin_user, audit, csrf, encrypt, public_user, rate_limit
 from app.trabajos.workflow import validate_graph, named
 from app.trabajos.compatibility import compatibility
 
 router = APIRouter(prefix="/admin", tags=["administracion"], dependencies=[Depends(admin_user)])
+
+SLOTS = [("generate", "Crear imagen"), ("reference", "Usar referencia")]
+STATUSES = ("queued", "running", "succeeded", "failed", "canceled")
 
 
 @router.get("/settings", response_model=GenerationSettings)
@@ -42,15 +48,41 @@ def gpu_public(db, gpu):
 
 @router.get("/overview")
 def overview(db: Session = Depends(database, scope="function")):
-    return {"users": db.scalar(select(func.count()).select_from(User)), "models": db.scalar(select(func.count()).select_from(ModelProfile)),
-            "queued": db.scalar(select(func.count()).select_from(Job).where(Job.status == "queued")),
-            "running": db.scalar(select(func.count()).select_from(Job).where(Job.status == "running")),
-            "succeeded": db.scalar(select(func.count()).select_from(Job).where(Job.status == "succeeded"))}
+    def total(model, *where):
+        return db.scalar(select(func.count()).select_from(model).where(*where))
+    return {"users": total(User), "models": total(ModelProfile), "outputs": total(Output),
+            "queued": total(Job, Job.status == "queued"), "running": total(Job, Job.status == "running"),
+            "succeeded": total(Job, Job.status == "succeeded"), "failed": total(Job, Job.status == "failed")}
+
+
+def job_counts(db, user_ids):
+    rows = db.execute(select(Job.user_id, Job.status, func.count()).where(Job.user_id.in_(user_ids)).group_by(Job.user_id, Job.status)).all()
+    counts = {user_id: dict.fromkeys(STATUSES, 0) for user_id in user_ids}
+    for user_id, status, amount in rows:
+        counts[user_id][status] = amount
+    return counts
+
+
+def member(db, user, counts):
+    return {**public_user(user), "credits": balance(db, user.id), "created_at": user.created_at,
+            "generations": counts, "last_generation": db.scalar(select(func.max(Job.created_at)).where(Job.user_id == user.id))}
 
 
 @router.get("/users")
 def users(offset: int = Query(0, ge=0, le=10000), db: Session = Depends(database, scope="function")):
-    return {"items": [{**public_user(u), "credits": balance(db, u.id)} for u in db.scalars(select(User).order_by(User.created_at).offset(offset).limit(50))]}
+    rows = db.scalars(select(User).order_by(User.created_at).offset(offset).limit(50)).all()
+    counts = job_counts(db, [u.id for u in rows])
+    return {"items": [member(db, u, counts[u.id]) for u in rows]}
+
+
+@router.get("/users/{user_id}")
+def user_detail(user_id: uuid.UUID, db: Session = Depends(database, scope="function")):
+    u = db.get(User, user_id)
+    if not u:
+        raise HTTPException(404, "Usuario no encontrado.")
+    ledger = db.scalars(select(CreditEntry).where(CreditEntry.user_id == u.id).order_by(CreditEntry.id.desc()).limit(20)).all()
+    return {**member(db, u, job_counts(db, [u.id])[u.id]),
+            "ledger": [{"id": e.id, "delta": e.delta, "reason": e.reason, "created_at": e.created_at} for e in ledger]}
 
 
 @router.patch("/users/{user_id}", dependencies=[Depends(csrf)])
@@ -85,8 +117,10 @@ def grant(user_id: uuid.UUID, data: CreditGrant, actor: User = Depends(admin_use
 
 @router.get("/models")
 def models(db: Session = Depends(database, scope="function")):
+    used = dict(db.execute(select(Job.model_name, func.count()).group_by(Job.model_name)).all())
     return {"items": [{"id": m.id, "name": m.name, "active": m.active, "character_prompt": m.character_prompt,
-                       "eye_prompt": m.eye_prompt, "loras": m.loras} for m in db.scalars(select(ModelProfile).order_by(ModelProfile.name))]}
+                       "eye_prompt": m.eye_prompt, "loras": m.loras, "generations": used.get(m.name, 0)}
+                      for m in db.scalars(select(ModelProfile).order_by(ModelProfile.name))]}
 
 
 @router.put("/models", dependencies=[Depends(csrf)])
@@ -103,15 +137,20 @@ def save_model(data: ModelInput, actor: User = Depends(admin_user), db: Session 
 
 @router.get("/workflows")
 def workflows(db: Session = Depends(database, scope="function")):
-    return {"items": [{"id": w.id, "name": w.name, "mode": w.mode, "cost": w.cost, "enabled": w.enabled,
-                       "version": w.version, "sha256": w.sha256, "contract": w.contract} for w in db.scalars(select(Workflow).order_by(Workflow.id))]}
+    rows = db.scalars(select(Workflow).order_by(Workflow.id)).all()
+    items = []
+    for mode, label in SLOTS:
+        w = next((row for row in rows if row.mode == mode), None)
+        items.append({"mode": mode, "label": label, "workflow": None if not w else {
+            "id": w.id, "name": w.name, "cost": w.cost, "enabled": w.enabled, "version": w.version,
+            "sha256": w.sha256, "updated_at": w.updated_at}})
+    return {"items": items}
 
 
 @router.put("/workflows/{workflow_id}", dependencies=[Depends(csrf)])
 def save_workflow(workflow_id: str, file: UploadFile = File(), mode: str = Form(), name: str = Form(), cost: int = Form(1),
                   enabled: bool = Form(True), actor: User = Depends(admin_user), db: Session = Depends(database, scope="function")):
-    import re
-    if not re.fullmatch(r"[a-zA-Z0-9_-]{1,80}", workflow_id) or mode not in ("generate", "reference") or not 1 <= cost <= 10000 or not 1 <= len(name) <= 120:
+    if not re.fullmatch(r"[a-zA-Z0-9_-]{1,80}", workflow_id) or mode not in dict(SLOTS) or not 1 <= cost <= 10000 or not 1 <= len(name) <= 120:
         raise HTTPException(400, "Configuración de workflow no válida.")
     raw = file.file.read(4 * 1024 * 1024 + 1)
     if len(raw) > 4 * 1024 * 1024:
@@ -129,7 +168,6 @@ def save_workflow(workflow_id: str, file: UploadFile = File(), mode: str = Form(
         db.add(w)
     w.name, w.mode, w.cost, w.enabled = name, mode, cost, enabled
     w.graph, w.sha256, w.contract, w.version, w.updated_at = graph, sha, contract, version, now()
-    from app.archivos.storage import save_object
     save_object(f"workflows/{workflow_id}-{sha}.json", raw)
     audit(db, actor, "workflow_saved", workflow_id, version=version, sha256=sha)
     return {"ok": True, "version": version}
@@ -229,6 +267,46 @@ def validate_gpu_workflow(gpu_id: uuid.UUID, workflow_id: str, actor: User = Dep
         raise HTTPException(503, "No se pudo consultar la configuración del servidor.") from None
     audit(db, actor, "gpu_workflow_checked", workflow_id, compatible=result["compatible"])
     return result
+
+
+@router.get("/generations")
+def generations(status: Literal["queued", "running", "succeeded", "failed", "canceled"] | None = None,
+                user_id: uuid.UUID | None = None, workflow_id: str | None = Query(None, max_length=80),
+                limit: int = Query(30, ge=1, le=100), offset: int = Query(0, ge=0, le=10000),
+                db: Session = Depends(database, scope="function")):
+    where = []
+    if status:
+        where.append(Job.status == status)
+    if user_id:
+        where.append(Job.user_id == user_id)
+    if workflow_id:
+        where.append(Job.workflow_id == workflow_id)
+    rows = db.execute(select(Job, User.username, User.name, GpuServer.name)
+                      .join(User, User.id == Job.user_id).outerjoin(GpuServer, GpuServer.id == Job.gpu_server_id)
+                      .where(*where).order_by(Job.created_at.desc(), Job.id).offset(offset).limit(limit)).all()
+    outputs = {}
+    for o in db.scalars(select(Output).where(Output.job_id.in_([r[0].id for r in rows])).order_by(Output.created_at, Output.id)):
+        outputs.setdefault(o.job_id, []).append({"id": str(o.id), "mime": o.mime, "bytes": o.size})
+    items = []
+    for job, username, name, gpu in rows:
+        p = job.params
+        items.append({"id": str(job.id), "user": {"id": str(job.user_id), "username": username, "name": name},
+                      "model_name": job.model_name, "workflow_id": job.workflow_id, "mode": job.workflow_mode,
+                      "status": job.status, "progress": job.progress, "cost": job.cost, "attempts": job.attempts,
+                      "gpu": gpu, "error": job.error_public, "prompt": p.get("prompt", ""), "ratio": p.get("ratio"),
+                      "batch": p.get("batch"), "seed": p.get("seed"), "has_reference": bool(p.get("upload_id")),
+                      "created_at": job.created_at, "started_at": job.started_at, "finished_at": job.finished_at,
+                      "outputs": outputs.get(job.id, [])})
+    return {"items": items, "total": db.scalar(select(func.count()).select_from(Job).where(*where)),
+            "next_offset": offset + len(rows) if len(rows) == limit else None}
+
+
+@router.get("/outputs/{output_id}/url")
+def output_url(output_id: uuid.UUID, download: bool = False, db: Session = Depends(database, scope="function")):
+    row = db.scalar(select(Output).join(Job, Job.id == Output.job_id).where(Output.id == output_id, Job.status == "succeeded"))
+    if not row:
+        raise HTTPException(404, "Archivo no encontrado.")
+    return signed_url(row.object_key, download)
 
 
 @router.get("/audit")

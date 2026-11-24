@@ -285,3 +285,14 @@ html.theming, html.theming *, html.theming *::before, html.theming *::after {
   .panel, .empty, .tile, .row, .skeleton { animation: none !important; }
   .ring-value, .editor summary .chevron { transition: none !important; }
 }
+
+.filters { justify-content: flex-start; flex-wrap: wrap; align-items: end; }
+.filters label { min-width: min(100%, 11rem); }
+.filters .count { margin-inline-start: auto; align-self: center; }
+.generation .prompt { margin: .75rem 0; max-width: 70ch; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+.facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 8rem), 1fr)); gap: .75rem 1rem; margin: 1rem 0 0; }
+.facts dt { font-size: .75rem; color: var(--muted); }
+.facts dd { margin: .125rem 0 0; font-weight: 550; overflow-wrap: anywhere; }
+.generation-tiles { margin-top: 1rem; grid-template-columns: repeat(auto-fill, minmax(clamp(5rem, 14vw, 7.5rem), 1fr)); }
+.back { margin-bottom: 1rem; width: fit-content; }
+.block-title { margin: 1.75rem 0 1rem; }

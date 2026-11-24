@@ -12,7 +12,7 @@ from app.security import hasher
 parser=argparse.ArgumentParser()
 parser.add_argument("--username", default="jhon")
 args=parser.parse_args()
-if not re.fullmatch(r"[a-z0-9_]{3,40}",args.username):
+if not re.fullmatch(r"\S{3,40}",args.username):
     raise SystemExit("Usuario no válido.")
 with SessionLocal.begin() as db:
     if db.scalar(select(User.id).where(User.username==args.username)):
