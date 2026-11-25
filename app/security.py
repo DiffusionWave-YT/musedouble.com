@@ -82,9 +82,41 @@ def current_user(session: LoginSession = Depends(login_session), db: Session = D
     return user
 
 
+SECTIONS = ("characters", "workflows", "users", "generations", "codes", "servers", "audit")
+PERMISSIONS = ("studio",) + SECTIONS
+PATH_SECTIONS = {"models": ("characters",), "loras": ("characters",), "workflows": ("workflows",), "settings": ("workflows",),
+                 "gpus": ("servers",), "users": ("users",), "generations": ("generations", "users"),
+                 "outputs": ("generations", "users"), "codes": ("codes",), "audit": ("audit",)}
+
+
+def permissions_of(user: User) -> list[str]:
+    if user.role != "admin":
+        return ["studio"]
+    if user.owner:
+        return list(PERMISSIONS)
+    return [p for p in PERMISSIONS if p in (user.permissions or [])]
+
+
 def admin_user(user: User = Depends(current_user)) -> User:
     if user.role != "admin":
         raise HTTPException(403, "Se requiere una cuenta de administrador.")
+    return user
+
+
+def owner_user(user: User = Depends(admin_user)) -> User:
+    if not user.owner:
+        raise HTTPException(403, "Solo el administrador principal puede hacer esto.")
+    return user
+
+
+def section_gate(request: Request, user: User = Depends(admin_user)) -> User:
+    if user.owner:
+        return user
+    granted = set(permissions_of(user)) & set(SECTIONS)
+    parts = request.url.path.split("/admin/", 1)[-1].split("/")
+    needed = PATH_SECTIONS.get(parts[0])
+    if not granted or (needed is not None and not granted & set(needed)) or (needed is None and parts[0] != "overview"):
+        raise HTTPException(403, "No tienes permiso para este apartado.")
     return user
 
 
@@ -112,4 +144,5 @@ def audit(db: Session, actor: User | None, action: str, target: str = "", **deta
 
 def public_user(user: User):
     return {"id": str(user.id), "username": user.username, "email": user.email,
-            "name": user.name, "role": user.role, "active": user.active, "can_generate": user.can_generate}
+            "name": user.name, "role": user.role, "active": user.active, "can_generate": user.can_generate,
+            "owner": user.owner, "permissions": permissions_of(user)}

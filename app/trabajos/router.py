@@ -9,6 +9,7 @@ from app.schemas import JobCreate, CatalogOut, JobOut, JobListOut
 from app.security import csrf, current_user, rate_limit
 from app.trabajos.service import enqueue, finish, job_public, owned_job
 from app.preferences import generation_settings
+from app.trabajos.workflow import RESOLUTIONS, reference_slots
 
 router = APIRouter(tags=["trabajos"])
 
@@ -17,9 +18,9 @@ router = APIRouter(tags=["trabajos"])
 def catalog(user: User = Depends(current_user), db: Session = Depends(database, scope="function")):
     limits = generation_settings(db)
     return {"models": [{"id": m.id, "name": m.name} for m in db.scalars(select(ModelProfile).where(ModelProfile.active).order_by(ModelProfile.name))],
-            "workflows": [{"id": w.id, "name": w.name, "mode": w.mode, "cost": w.cost, "version": w.version} for w in db.scalars(select(Workflow).where(Workflow.enabled).order_by(Workflow.name))],
+            "workflows": [{"id": w.id, "name": w.name, "mode": w.mode, "cost": w.cost, "version": w.version, "references": reference_slots(w.graph) if w.mode == "reference" else 0} for w in db.scalars(select(Workflow).where(Workflow.enabled).order_by(Workflow.name))],
             "credits": balance(db, user.id), "can_generate": user.can_generate,
-            "ratios": limits["ratios"], "max_batch": limits["max_batch"]}
+            "ratios": limits["ratios"], "resolutions": list(RESOLUTIONS), "max_batch": limits["max_batch"]}
 
 
 @router.post("/jobs", response_model=JobOut, status_code=202, dependencies=[Depends(csrf)])

@@ -1,3 +1,5 @@
+import { locale, tr } from "./i18n";
+
 export type Counts = { queued: number; running: number; succeeded: number; failed: number; canceled: number };
 
 export type Member = {
@@ -12,7 +14,14 @@ export type Member = {
   created_at: string;
   last_generation: string | null;
   generations: Counts;
+  owner: boolean;
+  permissions: string[];
 };
+
+export const permissionList = [
+  ["studio", "Estudio"], ["characters", "Personajes"], ["workflows", "Workflows"], ["users", "Usuarios"],
+  ["generations", "Generaciones"], ["codes", "Códigos de canje"], ["servers", "Servidores"], ["audit", "Actividad"],
+] as const;
 
 export type MemberDetail = Member & { ledger: { id: number; delta: number; reason: string; created_at: string }[] };
 
@@ -47,6 +56,22 @@ export type WorkflowSlot = {
   workflow: { id: string; name: string; cost: number; enabled: boolean; version: number; sha256: string; updated_at: string } | null;
 };
 
-export const when = (value: string | null) => (value ? new Date(value).toLocaleString("es", { dateStyle: "medium", timeStyle: "short" }) : "—");
+export const when = (value: string | null) => (value ? new Date(value).toLocaleString(locale(), { dateStyle: "medium", timeStyle: "short" }) : "—");
 
-export const reasons: Record<string, string> = { admin_grant: "Asignación del administrador", job: "Generación", refund: "Reembolso" };
+const reasonNames: Record<string, string> = { admin_grant: "Asignación del administrador", admin_adjust: "Ajuste del administrador", redeem: "Código canjeado", job: "Generación", refund: "Reembolso" };
+export const reason = (code: string) => tr(reasonNames[code] ?? code);
+
+export type RedeemCode = {
+  id: string;
+  code: string;
+  credits: number;
+  max_uses: number;
+  uses: number;
+  expires_at: string | null;
+  active: boolean;
+  note: string;
+  created_at: string;
+  state: "active" | "exhausted" | "expired" | "disabled";
+};
+
+export type Redemption = { user_id: string; name: string; username: string; created_at: string };

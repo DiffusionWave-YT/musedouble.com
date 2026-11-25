@@ -20,6 +20,8 @@ class User(Base):
     role: Mapped[str] = mapped_column(String(12), default="member")
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     can_generate: Mapped[bool] = mapped_column(Boolean, default=False)
+    owner: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
+    permissions: Mapped[list] = mapped_column(JSONB, default=list, server_default=text("'[]'::jsonb"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
     __table_args__ = (CheckConstraint("role IN ('admin','member')"),)
 
@@ -163,3 +165,26 @@ class Output(Base):
     mime: Mapped[str] = mapped_column(String(40))
     size: Mapped[int] = mapped_column(Integer)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
+class RedeemCode(Base):
+    __tablename__ = "redeem_codes"
+    id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, default=uuid.uuid4)
+    code: Mapped[str] = mapped_column(String(40), unique=True)
+    credits: Mapped[int] = mapped_column(Integer)
+    max_uses: Mapped[int] = mapped_column(Integer)
+    uses: Mapped[int] = mapped_column(Integer, default=0)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    note: Mapped[str] = mapped_column(String(200), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    __table_args__ = (CheckConstraint("credits > 0"), CheckConstraint("max_uses > 0"), CheckConstraint("uses >= 0"))
+
+
+class Redemption(Base):
+    __tablename__ = "redemptions"
+    id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, default=uuid.uuid4)
+    code_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("redeem_codes.id", ondelete="CASCADE"), index=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    __table_args__ = (UniqueConstraint("code_id", "user_id"),)

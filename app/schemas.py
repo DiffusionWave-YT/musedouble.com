@@ -26,6 +26,57 @@ class Register(Input):
         return value.strip().lower() if isinstance(value, str) else value
 
 
+class ProfileEdit(Input):
+    name: str = Field(min_length=1, max_length=120)
+    email: EmailStr | None = None
+
+
+class PasswordReset(Input):
+    password: str = Field(min_length=10, max_length=128)
+
+
+class AdminCreate(Input):
+    username: str = Field(pattern=r"^\S{3,40}$")
+    name: str = Field(min_length=1, max_length=120)
+    password: str = Field(min_length=10, max_length=128)
+    permissions: list[Literal["studio", "characters", "workflows", "users", "generations", "codes", "servers", "audit"]] = Field(max_length=8)
+
+    @field_validator("username", mode="before")
+    @classmethod
+    def lowered(cls, value):
+        return value.strip().lower() if isinstance(value, str) else value
+
+
+class AdminEdit(Input):
+    name: str = Field(min_length=1, max_length=120)
+    active: bool = True
+    permissions: list[Literal["studio", "characters", "workflows", "users", "generations", "codes", "servers", "audit"]] = Field(max_length=8)
+    password: str | None = Field(default=None, min_length=10, max_length=128)
+
+
+class DeleteConfirm(Input):
+    confirm: str = Field(min_length=1, max_length=64)
+
+
+class RedeemInput(Input):
+    code: str = Field(min_length=4, max_length=40)
+
+
+class CodeInput(Input):
+    code: str | None = Field(default=None, pattern=r"^[A-Za-z0-9_-]{4,40}$")
+    credits: int = Field(ge=1, le=100000)
+    max_uses: int = Field(ge=1, le=100000)
+    expires_at: datetime | None = None
+    note: str = Field(default="", max_length=200)
+
+
+class CodeUpdate(Input):
+    active: bool
+    max_uses: int = Field(ge=1, le=100000)
+    expires_at: datetime | None = None
+    note: str = Field(default="", max_length=200)
+
+
 class PasswordChange(Input):
     current_password: str = Field(min_length=1, max_length=128)
     new_password: str = Field(min_length=10, max_length=128)
@@ -60,19 +111,19 @@ class UserAccess(Input):
 
 
 class CreditGrant(Input):
-    amount: int = Field(gt=0, le=100000)
+    amount: int = Field(ge=-100000, le=100000)
     reference: str = Field(pattern=r"^[a-zA-Z0-9_-]{8,80}$")
     note: str = Field(min_length=1, max_length=200)
 
 
 class JobParams(Input):
-    model_id: str = Field(pattern=r"^[a-zA-Z0-9_-]{1,80}$")
+    model_id: str | None = Field(default=None, pattern=r"^[a-zA-Z0-9_-]{1,80}$")
     prompt: str = Field(min_length=1, max_length=4000)
-    seed: int | None = Field(default=None, ge=0, le=9007199254740991)
+    seed: int | None = Field(default=None, ge=-1, le=9007199254740991)
     batch: int = Field(default=1, ge=1, le=2)
-    ratio: Literal["4:5", "5:4", "1:1", "9:16", "16:9"] = "4:5"
-    strength: float = Field(default=0.6, ge=0, le=1)
-    upload_id: UUID | None = None
+    ratio: Literal["1:1", "4:5", "5:4", "3:4", "4:3", "2:3", "3:2", "9:16", "16:9", "21:9"] = "4:5"
+    resolution: Literal[1280, 1920, 2560] = 1920
+    upload_ids: list[UUID] = Field(default_factory=list, max_length=4)
 
 
 class JobCreate(Input):
@@ -82,7 +133,7 @@ class JobCreate(Input):
 
 class GenerationSettings(Input):
     max_batch: int = Field(ge=1, le=2)
-    ratios: list[Literal["4:5", "5:4", "1:1", "9:16", "16:9"]] = Field(min_length=1, max_length=5)
+    ratios: list[Literal["1:1", "4:5", "5:4", "3:4", "4:3", "2:3", "3:2", "9:16", "16:9", "21:9"]] = Field(min_length=1, max_length=10)
 
     @field_validator("ratios")
     @classmethod
@@ -100,6 +151,8 @@ class UserOut(BaseModel):
     role: Literal["admin", "member"]
     active: bool
     can_generate: bool
+    owner: bool = False
+    permissions: list[str] = []
 
 
 class SessionOut(BaseModel):
@@ -118,6 +171,7 @@ class WorkflowPublic(BaseModel):
     mode: Literal["generate", "reference"]
     cost: int
     version: int
+    references: int = 0
 
 
 class CatalogOut(BaseModel):
@@ -126,6 +180,7 @@ class CatalogOut(BaseModel):
     credits: int
     can_generate: bool
     ratios: list[str]
+    resolutions: list[int]
     max_batch: int
 
 

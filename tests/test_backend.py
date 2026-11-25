@@ -65,23 +65,59 @@ def test_success_is_durable_and_owned(environment):
     assert owner.call("/jobs").status_code==401
 
 
+def upload(env, client):
+    r = client.client.post("/api/v1/uploads", files={"file": ("../../reference.jpg", env["image"], "application/octet-stream")}, headers={"X-CSRF-Token": client.csrf})
+    assert r.status_code == 201, r.text
+    return r.json()["id"]
+
+
+def reference(**overrides):
+    data = {"workflow_id": "reference", "params": {"prompt": "Beach portrait from behind.", "ratio": "9:16", "resolution": 1280}}
+    data["params"].update(overrides)
+    return data
+
+
 def test_reference_upload_validation_and_workflow_contract(environment):
     env=environment;c=env["Client"]("member_one")
-    assert enqueue(c,params("reference")).status_code==400
+    assert enqueue(c,reference()).status_code==400
     r=c.client.post("/api/v1/uploads",files={"file":("fake.png",b"<?php ?>","image/png")},headers={"X-CSRF-Token":c.csrf})
     assert r.status_code==400
-    r=c.client.post("/api/v1/uploads",files={"file":("../../reference.jpg",env["image"],"application/octet-stream")},headers={"X-CSRF-Token":c.csrf})
-    assert r.status_code==201,r.text
-    upload_id=r.json()["id"]
+    first=upload(env,c)
     other=env["Client"]("member_two")
-    assert enqueue(other,params("reference",upload_id=upload_id)).status_code==400
-    created=enqueue(c,params("reference",upload_id=upload_id)).json()
+    assert enqueue(other,reference(upload_ids=[first])).status_code==400
+    assert enqueue(c,reference(upload_ids=[first,first])).status_code==400
+    assert enqueue(c,reference(upload_ids=[str(uuid.uuid4())])).status_code==400
+    assert enqueue(c,reference(upload_ids=[str(uuid.uuid4()) for _ in range(5)])).status_code==422
+    assert enqueue(c,params("generate",upload_ids=[first])).status_code==400
+    created=enqueue(c,reference(upload_ids=[first])).json()
     env["worker"].tick()
-    assert c.call("/jobs/"+created["id"]).json()["status"]=="succeeded"
+    done=c.call("/jobs/"+created["id"]).json()
+    assert done["status"]=="succeeded" and len(done["outputs"])==2 and done["cost"]==1
     assert env["state"]["uploads"]==1
     graph=list(env["state"]["prompts"].values())[0]["prompt"]
-    assert named(graph,"LOAD_IMAGE")[1]["inputs"]["image"]=="reference.png"
-    assert named(graph,"SELECT_CHARACTER")[1]["inputs"]["lora_1_name"]=="test.safetensors"
+    assert named(graph,"LOAD_IMAGE_1")[1]["inputs"]["image"]=="reference.png"
+    titles={n["_meta"]["title"] for n in graph.values()}
+    assert titles.isdisjoint({"LOAD_IMAGE_2","LOAD_IMAGE_3","LOAD_IMAGE_4","RESIZE_IMAGE_2","RESIZE_IMAGE_3","RESIZE_IMAGE_4"})
+    assert {"LOAD_IMAGE_1","RESIZE_IMAGE_1","FINAL_IMAGE_1","FINAL_IMAGE_2"}<=titles
+    video=next(n for n in graph.values() if n["class_type"]=="dw_minimax_h3_reference_to_video")["inputs"]
+    assert "ref_image_0" in video and not any(f"ref_image_{i}" in video for i in (1,2,3))
+    assert named(graph,"USER_PROMPT")[1]["inputs"]["text"]=="Beach portrait from behind."
+    aspect=next(n for n in graph.values() if n["class_type"]=="dw_aspect_resolution")["inputs"]
+    assert aspect["aspect_ratio"]=="9:16" and aspect["long_side"]==1280
+
+
+def test_reference_with_four_images_keeps_every_node(environment):
+    env=environment;c=env["Client"]("member_one")
+    ids=[upload(env,c) for _ in range(4)]
+    assert c.call("/catalog").json()["workflows"][0]["references"] in (0,4)
+    created=enqueue(c,reference(upload_ids=ids)).json()
+    env["worker"].tick()
+    assert c.call("/jobs/"+created["id"]).json()["status"]=="succeeded" and env["state"]["uploads"]==4
+    graph=list(env["state"]["prompts"].values())[0]["prompt"]
+    titles={n["_meta"]["title"] for n in graph.values()}
+    assert {f"LOAD_IMAGE_{i}" for i in range(1,5)}<=titles and {f"RESIZE_IMAGE_{i}" for i in range(1,5)}<=titles
+    video=next(n for n in graph.values() if n["class_type"]=="dw_minimax_h3_reference_to_video")["inputs"]
+    assert all(f"ref_image_{i}" in video for i in range(4))
 
 
 def test_failure_refund_once_and_no_server(environment):
@@ -395,14 +431,15 @@ def test_remapped_graphs_and_immutable_output(environment):
                     node["inputs"][field]=[mapping[str(value[0])],value[1]]
             remapped[mapping[key]]=node
         model={"character_prompt":"Adult portrait.","eye_prompt":"Brown eyes.","loras":[]}
-        options={"prompt":"A white shirt.","seed":2,"batch":1,"ratio":"4:5","strength":.6}
-        result=build_graph(remapped,mode,model,options,"reference.png")
-        assert named(result,"FINAL_IMAGE")[1]==named(remapped,"FINAL_IMAGE")[1]
-        allowed={"USER_PROMPT","CHARACTER_PROMPT","EYE_PROMPT","SELECT_CHARACTER","SEED","BATCH_SIZE","ASPECT_RATIOS","HORIZONTAL_RES","VERTICAL_RES","LOAD_IMAGE","REFERENCE_STRENGTH"}
+        options={"prompt":"A white shirt.","seed":2,"batch":1,"ratio":"4:5"}
+        result=build_graph(remapped,mode,model,options,["reference.png","reference.png","reference.png","reference.png"] if mode=="reference" else None)
+        allowed={"USER_PROMPT","CHARACTER_PROMPT","EYE_PROMPT","SELECT_CHARACTER","SEED","DW_SETUP","BATCH_SIZE","ASPECT_RATIOS","RESOLUTION","dw_aspect_resolution","HORIZONTAL_RES","VERTICAL_RES","LOAD_IMAGE_1","LOAD_IMAGE_2","LOAD_IMAGE_3","LOAD_IMAGE_4"}
         for key,node in remapped.items():
+            if mode=="generate" and node.get("_meta",{}).get("title")=="FINAL_IMAGE":
+                assert result[key]==node
             if node.get("_meta",{}).get("title") not in allowed:
                 assert result[key]==node
-        broken=copy.deepcopy(remapped);broken.pop(named(broken,"SEED")[0])
+        broken=copy.deepcopy(remapped);broken.pop(named(broken,"SEED" if mode=="generate" else "USER_PROMPT")[0])
         try:
             validate_graph(broken,mode);assert False
         except HTTPException:
@@ -421,6 +458,8 @@ def test_gallery_is_ordered_by_server_and_private(environment):
     assert owner.call("/outputs?order=az").status_code==200 and owner.call("/outputs?order=za").status_code==200
     assert owner.call("/outputs?order=random").status_code==422
     assert other.call("/outputs").json()["items"]==[]
+    assert len(owner.call("/outputs?workflow_id=generate").json()["items"])==2 and owner.call("/outputs?workflow_id=reference").json()["items"]==[]
+    assert owner.call("/outputs?workflow_id=other").status_code==422
     assert anon.call("/outputs").status_code==401
     page=owner.call("/outputs?limit=1").json()
     assert len(page["items"])==1 and page["next_offset"]==1
@@ -457,6 +496,10 @@ def test_admin_panels_list_generations_users_and_slots(environment):
     assert [s["mode"] for s in slots]==["generate","reference"] and all(s["workflow"] for s in slots)
     assert admin.call("/admin/overview").json()["outputs"]==1
     assert admin.call("/admin/models").json()["items"][0]["generations"]==2
+    model_id=admin.call("/admin/models").json()["items"][0]["id"]
+    assert admin.call("/admin/models/"+model_id,"DELETE").status_code==200
+    assert all(m["id"]!=model_id for m in admin.call("/admin/models").json()["items"])
+    assert admin.call("/admin/models/"+model_id,"DELETE").status_code==404
 
 
 def test_username_and_password_accept_symbols(environment):
@@ -468,3 +511,149 @@ def test_username_and_password_accept_symbols(environment):
     assert env["Client"]().call("/auth/register","POST",{"username":"has space","name":"X","email":"x@example.com","password":"long-enough-password"}).status_code==422
     clash=env["Client"]().call("/auth/register","POST",{"username":"ana@example.com","name":"Y","email":"y@example.com","password":"long-enough-password"})
     assert clash.status_code==409
+
+
+def krea_graph():
+    slots={f"lora_{i}_{k}":(("None" if k=="name" else 1)) for i in range(1,7) for k in ("name","strength")}
+    node=lambda title,cls,inputs:{"class_type":cls,"inputs":inputs,"_meta":{"title":title}}
+    return {"1":node("SELECT_CHARACTER","dw_lora_stack_apply_simple",slots),"2":node("CHARACTER_PROMPT","dw_text",{"text":""}),
+            "3":node("USER_PROMPT","dw_text",{"text":""}),"4":node("resolution","dw_aspect_resolution",{"aspect_ratio":"1:1","long_side":1920,"multiple_of":8}),
+            "5":node("dw_setup","dw_sampling_setup",{"seed":229,"batch_size":1}),"6":node("FINAL_IMAGE","dw_save_image_advanced",{"image":["5",0]})}
+
+
+def test_workflow_with_resolution_and_setup_nodes():
+    graph=krea_graph()
+    contract=validate_graph(graph,"generate")
+    assert contract["aspect_mode"]=="resolution" and contract["seed_node"]=="DW_SETUP"
+    model={"character_prompt":"Header","eye_prompt":"","loras":[{"name":"a.safetensors","strength":0.5}]}
+    built=build_graph(graph,"generate",model,{"prompt":"scene","seed":77,"batch":2,"ratio":"16:9","resolution":2560})
+    assert built["5"]["inputs"]["seed"]==77 and built["5"]["inputs"]["batch_size"]==2
+    assert built["4"]["inputs"]["aspect_ratio"]=="16:9" and built["4"]["inputs"]["long_side"]==2560
+    assert built["2"]["inputs"]["text"]=="Header" and built["3"]["inputs"]["text"]=="scene"
+    assert built["1"]["inputs"]["lora_1_name"]=="a.safetensors" and built["1"]["inputs"]["lora_2_name"]=="None"
+    assert graph["5"]["inputs"]["seed"]==229
+    for removed in ("5","4"):
+        broken=krea_graph();broken.pop(removed)
+        with pytest.raises(HTTPException):
+            validate_graph(broken,"generate")
+
+
+def test_seed_minus_one_is_random_and_resolution_is_checked(environment):
+    env=environment;c=env["Client"]("member_one")
+    first=enqueue(c,params(seed=-1)).json();second=enqueue(c,params(seed=-1,resolution=1280)).json()
+    assert first["params"]["seed"]>=0 and first["params"]["seed"]!=second["params"]["seed"]
+    assert second["params"]["resolution"]==1280
+    assert enqueue(c,params(resolution=999)).status_code==422
+    assert c.call("/catalog").json()["resolutions"]==[1280,1920,2560]
+    admin=env["Client"]("admin_test")
+    listing=admin.call("/admin/loras")
+    assert listing.status_code in (200,503)
+    assert c.call("/admin/loras").status_code==403
+
+
+def test_admin_manages_and_deletes_users(environment):
+    env=environment;admin=env["Client"]("admin_test");victim=env["Client"]("member_one");other=env["Client"]("member_two")
+    uid=str(env["ids"]["member_one"])
+    assert enqueue(victim).status_code==202
+    blocked=admin.call("/admin/users/"+uid,"DELETE",{"confirm":"member_one"})
+    assert blocked.status_code==409
+    env["worker"].tick()
+    with env["sessions"]() as db:
+        keys=[o.object_key for o in db.scalars(select(Output).where(Output.user_id==env["ids"]["member_one"]))]
+    from app.archivos.storage import object_path
+    assert keys and all(object_path(k).exists() for k in keys)
+    assert admin.call("/admin/users/"+uid,"DELETE",{"confirm":"wrong"}).status_code==400
+    assert admin.call("/admin/users/"+str(env["ids"]["admin_test"]),"DELETE",{"confirm":"admin_test"}).status_code==400
+    assert other.call("/admin/users/"+uid,"DELETE",{"confirm":"member_one"}).status_code==403
+    before=credits(victim)
+    assert admin.call("/admin/users/"+uid+"/credits","POST",{"amount":-3,"reference":"adjust-ref-1","note":"correction"}).status_code==200
+    assert credits(victim)==before-3
+    assert admin.call("/admin/users/"+uid+"/credits","POST",{"amount":-1000,"reference":"adjust-ref-2","note":"too much"}).status_code==400
+    assert admin.call("/admin/users/"+uid+"/credits","POST",{"amount":0,"reference":"adjust-ref-3","note":"zero"}).status_code==400
+    edited=admin.call("/admin/users/"+uid+"/profile","PATCH",{"name":"Renamed","email":"renamed@example.com"})
+    assert edited.status_code==200 and edited.json()["name"]=="Renamed"
+    assert admin.call("/admin/users/"+str(env["ids"]["member_two"])+"/profile","PATCH",{"name":"Two","email":"renamed@example.com"}).status_code==409
+    assert admin.call("/admin/users/"+uid+"/password","POST",{"password":"brand-new-password-1"}).status_code==200
+    assert victim.call("/jobs").status_code==401
+    fresh=env["Client"]()
+    assert fresh.call("/auth/login","POST",{"identity":"member_one","password":"test-only-long-password"}).status_code==401
+    assert fresh.call("/auth/login","POST",{"identity":"member_one","password":"brand-new-password-1"}).status_code==200
+    done=admin.call("/admin/users/"+uid,"DELETE",{"confirm":"member_one"})
+    assert done.status_code==200 and done.json()["files"]>=1
+    with env["sessions"]() as db:
+        for model in (Job,Output,CreditEntry):
+            assert db.scalar(select(func.count()).select_from(model).where(model.user_id==env["ids"]["member_one"]))==0
+        from app.models import User
+        assert db.get(User,env["ids"]["member_one"]) is None and db.get(User,env["ids"]["member_two"]) is not None
+        assert db.scalar(select(func.count()).select_from(Audit).where(Audit.action=="user_deleted"))==1
+    assert not any(object_path(k).exists() for k in keys)
+    assert env["Client"]().call("/auth/login","POST",{"identity":"member_one","password":"brand-new-password-1"}).status_code==401
+    assert admin.call("/admin/users/"+uid,"DELETE",{"confirm":"member_one"}).status_code==404
+
+
+def test_redeem_codes_limits_expiry_and_permissions(environment):
+    env=environment;admin=env["Client"]("admin_test");one=env["Client"]("member_one");two=env["Client"]("member_two")
+    soon=(now()+timedelta(days=1)).isoformat()
+    assert one.call("/admin/codes").status_code==403
+    assert admin.call("/admin/codes","POST",{"credits":5,"max_uses":1,"expires_at":(now()-timedelta(days=1)).isoformat()}).status_code==400
+    created=admin.call("/admin/codes","POST",{"code":"promo-test","credits":5,"max_uses":2,"expires_at":soon,"note":"launch"})
+    assert created.status_code==201 and created.json()["code"]=="PROMO-TEST" and created.json()["state"]=="active"
+    assert admin.call("/admin/codes","POST",{"code":"PROMO-TEST","credits":1,"max_uses":1}).status_code==409
+    auto=admin.call("/admin/codes","POST",{"credits":2,"max_uses":1}).json()
+    assert len(auto["code"])==14 and auto["expires_at"] is None
+    before=credits(one)
+    assert one.call("/credits/redeem","POST",{"code":"nonsense-code"}).status_code==404
+    ok=one.call("/credits/redeem","POST",{"code":" promo-test "});assert ok.status_code==200 and ok.json()["added"]==5
+    assert credits(one)==before+5
+    assert one.call("/credits/redeem","POST",{"code":"PROMO-TEST"}).status_code==400 and credits(one)==before+5
+    assert two.call("/credits/redeem","POST",{"code":"PROMO-TEST"}).status_code==200
+    assert admin.call("/credits/redeem","POST",{"code":"PROMO-TEST"}).status_code==400
+    row=[c for c in admin.call("/admin/codes").json()["items"] if c["code"]=="PROMO-TEST"][0]
+    assert row["uses"]==2 and row["state"]=="exhausted"
+    who=admin.call("/admin/codes/"+row["id"]+"/redemptions").json()["items"]
+    assert sorted(w["username"] for w in who)==["member_one","member_two"]
+    assert admin.call("/admin/codes/"+row["id"],"PATCH",{"active":True,"max_uses":1,"expires_at":None,"note":""}).status_code==400
+    assert admin.call("/admin/codes/"+row["id"],"PATCH",{"active":True,"max_uses":3,"expires_at":None,"note":""}).json()["state"]=="active"
+    assert admin.call("/admin/codes/"+auto["id"],"PATCH",{"active":False,"max_uses":1,"expires_at":None,"note":""}).json()["state"]=="disabled"
+    assert one.call("/credits/redeem","POST",{"code":auto["code"]}).status_code==400
+    with env["sessions"]() as db:
+        from app.models import RedeemCode
+        item=db.get(RedeemCode,uuid.UUID(row["id"]))
+        item.expires_at=now()-timedelta(minutes=1);db.commit()
+    assert admin.call("/admin/codes").json()["items"][-1]["state"] in ("expired","disabled")
+    assert admin.call("/admin/codes/"+row["id"],"DELETE").status_code==200
+    assert admin.call("/admin/codes/"+row["id"],"DELETE").status_code==404
+    assert credits(one)==before+5
+
+
+def test_owner_creates_admins_with_limited_sections(environment):
+    env=environment;owner=env["Client"]("admin_test");member=env["Client"]("member_one")
+    body={"username":"Editor@Uno","name":"Editor","password":"editor-long-pass-1","permissions":["users","codes"]}
+    assert member.call("/admin/admins","POST",body).status_code==403
+    created=owner.call("/admin/admins","POST",body)
+    assert created.status_code==201 and created.json()["username"]=="editor@uno" and created.json()["permissions"]==["users","codes"]
+    assert owner.call("/admin/admins","POST",body).status_code==409
+    assert owner.call("/admin/admins","POST",{**body,"username":"x","permissions":["nope"]}).status_code==422
+    login=env["Client"]()
+    assert login.call("/auth/login","POST",{"identity":"editor@uno","password":"editor-long-pass-1"}).status_code==200
+    uid=created.json()["id"]
+    session=login.call("/auth/session").json()
+    assert session["user"]["permissions"]==["users","codes"] and not session["user"]["owner"]
+    call=login.call
+    assert call("/admin/users").status_code==200 and call("/admin/codes").status_code==200 and call("/admin/overview").status_code==200
+    for blocked in ("/admin/models","/admin/workflows","/admin/gpus","/admin/audit","/admin/settings","/admin/loras"):
+        assert call(blocked).status_code==403,blocked
+    assert call("/admin/generations").status_code==200
+    assert call("/admin/admins","POST",{**body,"username":"other-admin"}).status_code==403
+    assert call("/jobs","POST",params(),).status_code in (403,422)
+    edited=owner.call("/admin/admins/"+uid,"PATCH",{"name":"Editor","active":True,"permissions":["studio"]})
+    assert edited.status_code==200 and edited.json()["permissions"]==["studio"]
+    assert call("/admin/users").status_code==403 and call("/admin/overview").status_code==403
+    assert owner.call("/admin/admins/"+uid,"PATCH",{"name":"Editor","active":True,"permissions":["studio"],"password":"new-long-password-2"}).status_code==200
+    assert call("/admin/users").status_code in (401,403)
+    assert owner.call("/admin/admins/"+uid,"DELETE",{"confirm":"wrong"}).status_code==400
+    assert owner.call("/admin/admins/"+uid,"DELETE",{"confirm":"editor@uno"}).status_code==200
+    assert owner.call("/admin/admins/"+uid,"DELETE",{"confirm":"editor@uno"}).status_code==404
+    mine=owner.call("/auth/session").json()["user"]
+    assert owner.call("/admin/admins/"+mine["id"],"PATCH",{"name":"x","active":False,"permissions":[]}).status_code==400
+    assert mine["owner"] and "studio" in mine["permissions"] and "audit" in mine["permissions"]

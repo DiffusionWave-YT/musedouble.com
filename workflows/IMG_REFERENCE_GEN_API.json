@@ -1,474 +1,317 @@
 {
-  "1": {
+  "236": {
     "inputs": {
-      "conditioning": [
-        "14",
-        0
-      ]
+      "image": "a (12).jpg"
     },
-    "class_type": "ConditioningZeroOut",
+    "class_type": "LoadImage",
     "_meta": {
-      "title": "Conditioning Zero Out"
+      "title": "LOAD_IMAGE_1",
+      "cnr_id": "comfy-core",
+      "ver": "0.28.0"
     }
   },
-  "2": {
+  "237": {
     "inputs": {
-      "text_1": [
-        "44",
+      "image": "a (23).jpg"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "LOAD_IMAGE_2",
+      "cnr_id": "comfy-core",
+      "ver": "0.28.0"
+    }
+  },
+  "238": {
+    "inputs": {
+      "image": "a (24).jpg"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "LOAD_IMAGE_3",
+      "cnr_id": "comfy-core",
+      "ver": "0.28.0"
+    }
+  },
+  "239": {
+    "inputs": {
+      "size": [
+        "260",
         0
       ],
-      "text_2": [
-        "46",
-        0
-      ],
-      "text_3": "",
-      "text_4": "",
-      "connector": ".",
-      "normalize_commas": false
-    },
-    "class_type": "dw_text_concatenate",
-    "_meta": {
-      "title": "dw_text_concatenate"
-    }
-  },
-  "3": {
-    "inputs": {
-      "clip_name": "qwen_3_4b.safetensors",
-      "type": "qwen_image",
-      "device": "default"
-    },
-    "class_type": "CLIPLoader",
-    "_meta": {
-      "title": "Load CLIP"
-    }
-  },
-  "4": {
-    "inputs": {
-      "scheduler": "bong_tangent",
-      "steps": 8,
-      "denoise": 1,
-      "model": [
-        "51",
-        0
-      ]
-    },
-    "class_type": "BasicScheduler",
-    "_meta": {
-      "title": "BasicScheduler"
-    }
-  },
-  "5": {
-    "inputs": {
-      "unet_name": "nazr_int8_convrot.safetensors",
-      "weight_dtype": "default"
-    },
-    "class_type": "UNETLoader",
-    "_meta": {
-      "title": "Load Diffusion Model"
-    }
-  },
-  "7": {
-    "inputs": {
-      "strength": [
-        "42",
-        1
-      ],
-      "start_percent": 0,
-      "end_percent": 1,
-      "model": [
-        "34",
-        0
-      ],
-      "model_patch": [
-        "41",
-        0
-      ],
-      "vae": [
-        "23",
-        0
-      ],
-      "image": [
-        "50",
-        0
-      ]
-    },
-    "class_type": "QwenImageDiffsynthControlnet",
-    "_meta": {
-      "title": "Apply Qwen Image DiffSynth ControlNet"
-    }
-  },
-  "10": {
-    "inputs": {
-      "sampler_name": "er_sde"
-    },
-    "class_type": "KSamplerSelect",
-    "_meta": {
-      "title": "KSamplerSelect"
-    }
-  },
-  "12": {
-    "inputs": {
-      "lora_name": "zib/Z-Image-Fun-Lora-Distill-8-Steps-2603-ComfyUI.safetensors",
-      "strength_model": 0.8,
-      "model": [
-        "49",
-        0
-      ]
-    },
-    "class_type": "LoraLoaderModelOnly",
-    "_meta": {
-      "title": "Load LoRA"
-    }
-  },
-  "14": {
-    "inputs": {
-      "text": [
-        "2",
-        0
-      ],
-      "clip": [
-        "3",
-        0
-      ]
-    },
-    "class_type": "CLIPTextEncode",
-    "_meta": {
-      "title": "CLIP Text Encode (Positive Prompt)"
-    }
-  },
-  "15": {
-    "inputs": {
-      "text": [
-        "38",
-        0
-      ],
-      "clip": [
-        "3",
-        0
-      ]
-    },
-    "class_type": "CLIPTextEncode",
-    "_meta": {
-      "title": "CLIP Text Encode (Positive Prompt)"
-    }
-  },
-  "16": {
-    "inputs": {
-      "quality": 85,
-      "images": [
-        "27",
-        5
-      ]
-    },
-    "class_type": "dw_jpg_preview",
-    "_meta": {
-      "title": "FINAL_IMAGE"
-    }
-  },
-  "17": {
-    "inputs": {
-      "size": 1280,
       "method": "LANCZOS",
-      "divisible_by": 8,
+      "divisible_by": 32,
       "image": [
-        "40",
-        0
-      ],
-      "vae": [
-        "23",
+        "237",
         0
       ]
     },
     "class_type": "dw_resize_longest_side",
     "_meta": {
-      "title": "dw_resize_longest_side"
+      "title": "RESIZE_IMAGE_2"
     }
   },
-  "23": {
+  "240": {
     "inputs": {
-      "vae_name": "ae.safetensors"
-    },
-    "class_type": "VAELoader",
-    "_meta": {
-      "title": "Load VAE"
-    }
-  },
-  "24": {
-    "inputs": {
-      "prompt": "face",
-      "negative_prompt": "",
-      "threshold": 0,
-      "min_width_pixels": 0,
-      "min_height_pixels": 0,
-      "positive_expand": 4,
-      "negative_expand": 0,
-      "edge_blur": 0,
-      "edge_hardness": 0,
-      "use_video_model": false,
-      "keep_model_loaded": true,
-      "mask_smooth_positive": 0,
-      "mask_smooth_negative": 0,
-      "mask_grouping": "none",
-      "group_nearest_count": 1,
-      "group_distance_px": 1,
-      "object_ids": "",
-      "model_cache": "VRAM",
-      "image": [
-        "39",
-        5
-      ]
-    },
-    "class_type": "dw_sam31_segmentation",
-    "_meta": {
-      "title": "dw_sam31_segmentation"
-    }
-  },
-  "26": {
-    "inputs": {
-      "prompt": "eye, eyes",
-      "negative_prompt": "",
-      "threshold": 0,
-      "min_width_pixels": 0,
-      "min_height_pixels": 0,
-      "positive_expand": 4,
-      "negative_expand": 0,
-      "edge_blur": 0,
-      "edge_hardness": 0,
-      "use_video_model": 0,
-      "keep_model_loaded": true,
-      "mask_smooth_positive": 0,
-      "mask_smooth_negative": 0,
-      "mask_grouping": "distance_threshold",
-      "group_nearest_count": 1,
-      "group_distance_px": 100,
-      "object_ids": "",
-      "model_cache": "VRAM",
-      "image": [
-        "28",
-        5
-      ]
-    },
-    "class_type": "dw_sam31_segmentation",
-    "_meta": {
-      "title": "DW_SAM31Segmentation_P4"
-    }
-  },
-  "27": {
-    "inputs": {
-      "seed": [
-        "43",
+      "size": [
+        "260",
         0
       ],
-      "cfg": 1,
-      "denoise": 0.5,
-      "disable_noise": false,
-      "crop_factor": 2.5,
-      "crop_upscale": [
-        "36",
-        5
-      ],
-      "keep_ratio_crop": false,
-      "noise_mask": true,
-      "force_inpaint": true,
-      "batch_size": [
-        "33",
+      "method": "LANCZOS",
+      "divisible_by": 32,
+      "image": [
+        "238",
+        0
+      ]
+    },
+    "class_type": "dw_resize_longest_side",
+    "_meta": {
+      "title": "RESIZE_IMAGE_3"
+    }
+  },
+  "241": {
+    "inputs": {
+      "size": [
+        "260",
         0
       ],
-      "mask_processing_mode": "preserve_input_masks",
-      "composite_mode": "multiband",
-      "blend_levels": 32,
-      "out_width": [
-        "36",
+      "method": "LANCZOS",
+      "divisible_by": 32,
+      "image": [
+        "236",
+        0
+      ]
+    },
+    "class_type": "dw_resize_longest_side",
+    "_meta": {
+      "title": "RESIZE_IMAGE_1"
+    }
+  },
+  "242": {
+    "inputs": {
+      "image": "a (24).jpg"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "LOAD_IMAGE_4",
+      "cnr_id": "comfy-core",
+      "ver": "0.28.0"
+    }
+  },
+  "243": {
+    "inputs": {
+      "size": [
+        "260",
+        0
+      ],
+      "method": "LANCZOS",
+      "divisible_by": 32,
+      "image": [
+        "242",
+        0
+      ]
+    },
+    "class_type": "dw_resize_longest_side",
+    "_meta": {
+      "title": "RESIZE_IMAGE_4"
+    }
+  },
+  "244": {
+    "inputs": {
+      "attention": "comfy kitchen attention",
+      "model": [
+        "245",
+        0
+      ]
+    },
+    "class_type": "ModelAttentionBackend",
+    "_meta": {
+      "title": "Model Attention Backend",
+      "cnr_id": "comfy-core",
+      "ver": "0.33.0"
+    }
+  },
+  "245": {
+    "inputs": {
+      "unet_name": "10Eros_Max_h3_8stepTURBO_beta7_int8HQ.safetensors",
+      "weight_dtype": "default"
+    },
+    "class_type": "UNETLoader",
+    "_meta": {
+      "title": "Load Diffusion Model",
+      "cnr_id": "comfy-core",
+      "ver": "0.28.0"
+    }
+  },
+  "246": {
+    "inputs": {
+      "prompt": [
+        "247",
+        0
+      ],
+      "width": [
+        "253",
+        0
+      ],
+      "height": [
+        "253",
         1
       ],
-      "out_height": [
-        "36",
-        2
-      ],
-      "model": [
-        "28",
+      "length": [
+        "258",
         0
       ],
-      "positive": [
-        "15",
+      "ref_image_size": "max",
+      "clip": [
+        "255",
         0
-      ],
-      "negative": [
-        "28",
-        2
       ],
       "vae": [
-        "23",
+        "257",
         0
       ],
-      "sampler_obj": [
-        "10",
+      "audio_vae": [
+        "259",
         0
       ],
-      "sigmas_input": [
-        "4",
+      "ref_image_0": [
+        "241",
         0
       ],
-      "image": [
-        "28",
-        5
+      "ref_image_1": [
+        "239",
+        0
       ],
-      "mask": [
-        "26",
-        1
+      "ref_image_2": [
+        "240",
+        0
+      ],
+      "ref_image_3": [
+        "243",
+        0
       ]
     },
-    "class_type": "dw_ksampler_custom",
+    "class_type": "dw_minimax_h3_reference_to_video",
     "_meta": {
-      "title": "DW_KsamplerCustom_P4"
+      "title": "dw_minimax_h3_reference_to_video"
     }
   },
-  "28": {
+  "247": {
     "inputs": {
-      "seed": [
-        "43",
-        0
-      ],
-      "cfg": 1,
-      "denoise": 0.4,
-      "disable_noise": false,
-      "crop_factor": 3.5,
-      "crop_upscale": [
-        "36",
-        5
-      ],
-      "keep_ratio_crop": true,
-      "noise_mask": true,
-      "force_inpaint": true,
-      "batch_size": [
-        "33",
-        0
-      ],
-      "mask_processing_mode": "preserve_input_masks",
-      "composite_mode": "multiband",
-      "blend_levels": 32,
-      "out_width": [
-        "36",
-        1
-      ],
-      "out_height": [
-        "36",
-        2
-      ],
-      "model": [
-        "39",
-        0
-      ],
-      "positive": [
-        "39",
-        1
-      ],
-      "negative": [
-        "39",
-        2
-      ],
-      "vae": [
-        "23",
-        0
-      ],
-      "sampler_obj": [
-        "10",
-        0
-      ],
-      "sigmas_input": [
-        "4",
-        0
-      ],
-      "image": [
-        "39",
-        5
-      ],
-      "mask": [
-        "24",
-        1
-      ]
+      "text": "subject_definitions:\n<Subject 1> is the same person across all three references. Use <Picture 1> for her dark wavy hair and full bangs, <Picture 2> for her facial features and forearm tattoo, and <Picture 3> for her three-quarter facial profile.\n\nsummary:\n[reference generation] Create a single candid beach portrait of <Subject 1> from behind, with bare shoulders and an opaque towel wrapped around her.\n\nretention_analysis:\n<Subject 1> (appears in [Shot 1]): fully_preserved - retain her facial identity, hairstyle, and visible tattoo placement.\n\ndetailed_description:\nA medium-quality amateur phone photo taken from a few steps away in late-afternoon light, with slightly bright sand and soft detail in the distance.\n\n[Shot 1] <Subject 1> sits on a low driftwood log facing the ocean, wrapped in an opaque navy towel that covers her chest and lap. Both feet rest in the sand. Her tattooed forearm rests along the log beside her, and her free hand holds the folded towel in place. Turn her head back just enough to show her three-quarter profile and a relaxed, closed-mouth smile. Photograph her from behind and slightly to one side, framing her from head to knees with the surf beyond her. Hold the result as a single still photograph.\n\noverall_soundscape: N/A\n\nnon_diegetic_music: N/A"
     },
-    "class_type": "dw_ksampler_custom",
+    "class_type": "dw_text",
     "_meta": {
-      "title": "DW_KsamplerCustom_P3"
+      "title": "USER_PROMPT"
     }
   },
-  "30": {
+  "248": {
     "inputs": {
       "seed": [
-        "43",
-        0
+        "249",
+        4
       ],
       "cfg": 1,
       "denoise": 1,
-      "disable_noise": false,
-      "crop_factor": 2,
-      "crop_upscale": 0,
-      "keep_ratio_crop": 1,
+      "crop_factor": 1,
+      "crop_upscale": 1024,
+      "keep_ratio_crop": true,
       "noise_mask": true,
       "force_inpaint": true,
-      "batch_size": [
-        "33",
-        0
-      ],
+      "batch_size": 1,
       "mask_processing_mode": "preserve_input_masks",
       "composite_mode": "multiband",
       "blend_levels": 32,
-      "out_width": [
-        "37",
-        0
-      ],
-      "out_height": [
-        "37",
-        1
-      ],
+      "denoise_steps": -1,
       "model": [
-        "51",
+        "249",
         0
       ],
       "positive": [
-        "14",
+        "246",
         0
       ],
       "negative": [
-        "1",
+        "261",
         0
       ],
       "vae": [
-        "35",
+        "257",
         0
       ],
       "sampler_obj": [
-        "10",
-        0
+        "249",
+        1
       ],
       "sigmas_input": [
-        "4",
-        0
+        "249",
+        2
+      ],
+      "latent_image": [
+        "246",
+        1
       ]
     },
     "class_type": "dw_ksampler_custom",
     "_meta": {
-      "title": "DW_KsamplerCustom_P1"
+      "title": "dw_ksampler_custom"
     }
   },
-  "33": {
+  "249": {
     "inputs": {
-      "value": 1
+      "sampler_name": "er_sde",
+      "scheduler": "beta",
+      "steps": 8,
+      "denoise": 1,
+      "seed": 1,
+      "width": 1024,
+      "height": 1024,
+      "batch_size": 1,
+      "model": [
+        "252",
+        0
+      ]
     },
-    "class_type": "dw_int_value",
+    "class_type": "dw_sampling_setup",
     "_meta": {
-      "title": "BATCH_SIZE"
+      "title": "DW_SETUP"
     }
   },
-  "34": {
+  "250": {
     "inputs": {
-      "lora_1_name": "zib/fernandamora_nzr-step00003000_comfyui.safetensors",
-      "lora_1_strength": 0.5,
-      "lora_2_name": "zib/bella_puffs_nzr-step00002100_comfyui.safetensors",
-      "lora_2_strength": 0.5,
+      "mode": "first_image",
+      "index": 0,
+      "images": [
+        "248",
+        5
+      ]
+    },
+    "class_type": "dw_image_batch_selector",
+    "_meta": {
+      "title": "dw_image_from_batch"
+    }
+  },
+  "251": {
+    "inputs": {
+      "mode": "last_image",
+      "index": 0,
+      "images": [
+        "248",
+        5
+      ]
+    },
+    "class_type": "dw_image_batch_selector",
+    "_meta": {
+      "title": "dw_image_from_batch"
+    }
+  },
+  "252": {
+    "inputs": {
+      "lora_1_name": "None",
+      "lora_1_strength": 0,
+      "lora_2_name": "None",
+      "lora_2_strength": 1,
       "lora_3_name": "None",
-      "lora_3_strength": 1,
+      "lora_3_strength": 0.5,
       "lora_4_name": "None",
       "lora_4_strength": 1,
       "lora_5_name": "None",
@@ -476,229 +319,131 @@
       "lora_6_name": "None",
       "lora_6_strength": 1,
       "model": [
-        "12",
+        "244",
         0
       ]
     },
     "class_type": "dw_lora_stack_apply_simple",
     "_meta": {
-      "title": "SELECT_CHARACTER"
+      "title": "dw_lora_stack_apply_simple"
     }
   },
-  "35": {
+  "253": {
     "inputs": {
-      "vae_name": "ultraflux_vae.safetensors"
+      "aspect_ratio": "9:16",
+      "long_side": 1280,
+      "multiple_of": 8
+    },
+    "class_type": "dw_aspect_resolution",
+    "_meta": {
+      "title": "dw_aspect_resolution"
+    }
+  },
+  "254": {
+    "inputs": {
+      "save_image": true,
+      "filename_prefix": "dw_image",
+      "format": "jpg",
+      "bit_depth": "Auto",
+      "input_color_space": "sRGB",
+      "quality": 90,
+      "auto_install_deps": true,
+      "save_metadata": false,
+      "image": [
+        "251",
+        0
+      ]
+    },
+    "class_type": "dw_save_image_advanced",
+    "_meta": {
+      "title": "FINAL_IMAGE_1"
+    }
+  },
+  "255": {
+    "inputs": {
+      "clip_name": "qwen3vl_32b_minimax_h3_int8_convrot.safetensors",
+      "type": "minimax",
+      "device": "default"
+    },
+    "class_type": "CLIPLoader",
+    "_meta": {
+      "title": "Load CLIP",
+      "cnr_id": "comfy-core",
+      "ver": "0.28.0"
+    }
+  },
+  "256": {
+    "inputs": {
+      "save_image": true,
+      "filename_prefix": "dw_image",
+      "format": "jpg",
+      "bit_depth": "Auto",
+      "input_color_space": "sRGB",
+      "quality": 90,
+      "auto_install_deps": true,
+      "save_metadata": false,
+      "image": [
+        "250",
+        0
+      ]
+    },
+    "class_type": "dw_save_image_advanced",
+    "_meta": {
+      "title": "FINAL_IMAGE_2"
+    }
+  },
+  "257": {
+    "inputs": {
+      "vae_name": "minimax_h3_video_vae_int8_convrot.safetensors"
     },
     "class_type": "VAELoader",
     "_meta": {
-      "title": "Load VAE"
+      "title": "Load VAE",
+      "cnr_id": "comfy-core",
+      "ver": "0.28.0"
     }
   },
-  "36": {
+  "258": {
     "inputs": {
-      "size": [
-        "37",
-        10
-      ],
-      "method": "LANCZOS",
-      "divisible_by": 8,
-      "image": [
-        "30",
-        5
-      ],
-      "vae": [
-        "35",
-        0
-      ]
+      "value": 8
     },
-    "class_type": "dw_resize_longest_side",
+    "class_type": "dw_int_value",
     "_meta": {
-      "title": "DW_ResizeLongestSide_P2"
+      "title": "LENGTH"
     }
   },
-  "37": {
+  "259": {
     "inputs": {
-      "WIDTH": [
-        "17",
-        1
-      ],
-      "HEIGHT": [
-        "17",
-        2
-      ],
-      "UPSCALER": 1.5,
-      "SUM": 0
+      "vae_name": "minimax_h3_audio_vae_fp32.safetensors"
     },
-    "class_type": "dw_resolution",
+    "class_type": "VAELoader",
     "_meta": {
-      "title": "dw_resolution"
+      "title": "Load VAE",
+      "cnr_id": "comfy-core",
+      "ver": "0.28.0"
     }
   },
-  "38": {
+  "260": {
     "inputs": {
-      "text": "Hazel brown eyes.\n"
-    },
-    "class_type": "dw_text",
-    "_meta": {
-      "title": "EYE_PROMPT"
-    }
-  },
-  "39": {
-    "inputs": {
-      "seed": [
-        "43",
-        0
-      ],
-      "cfg": 1,
-      "denoise": 0.5,
-      "disable_noise": false,
-      "crop_factor": 2,
-      "crop_upscale": [
-        "36",
-        6
-      ],
-      "keep_ratio_crop": 1,
-      "noise_mask": true,
-      "force_inpaint": true,
-      "batch_size": [
-        "33",
-        0
-      ],
-      "mask_processing_mode": "preserve_input_masks",
-      "composite_mode": "multiband",
-      "blend_levels": 32,
-      "out_width": [
-        "36",
-        1
-      ],
-      "out_height": [
-        "36",
-        2
-      ],
-      "model": [
-        "30",
-        0
-      ],
-      "positive": [
-        "30",
-        1
-      ],
-      "negative": [
-        "30",
-        2
-      ],
-      "vae": [
-        "35",
-        0
-      ],
-      "sampler_obj": [
-        "10",
-        0
-      ],
-      "sigmas_input": [
-        "4",
-        0
-      ],
-      "image": [
-        "36",
-        0
-      ]
-    },
-    "class_type": "dw_ksampler_custom",
-    "_meta": {
-      "title": "DW_KsamplerCustom_P2"
-    }
-  },
-  "40": {
-    "inputs": {
-      "image": "HTfCRjBXwAAhRIg.jpg"
-    },
-    "class_type": "LoadImage",
-    "_meta": {
-      "title": "LOAD_IMAGE"
-    }
-  },
-  "41": {
-    "inputs": {
-      "name": "Z-Image-Fun-Controlnet-Union-2.1-lite.safetensors"
-    },
-    "class_type": "ModelPatchLoader",
-    "_meta": {
-      "title": "Load Model Patch"
-    }
-  },
-  "42": {
-    "inputs": {
-      "value": 0.6
+      "value": 1536
     },
     "class_type": "dw_value",
     "_meta": {
-      "title": "REFERENCE_STRENGTH"
+      "title": "REF_RESOLUTION"
     }
   },
-  "43": {
+  "261": {
     "inputs": {
-      "seed": 1171
-    },
-    "class_type": "dw_seed",
-    "_meta": {
-      "title": "SEED"
-    }
-  },
-  "44": {
-    "inputs": {
-      "text": "A beautiful Indian young woman with bronze-brown skin, waist-length black hair styled in two long straight braids, falling over the shoulders, with a center part and evenly braided sections, and a very slim figure. "
-    },
-    "class_type": "dw_text",
-    "_meta": {
-      "title": "CHARACTER_PROMPT"
-    }
-  },
-  "46": {
-    "inputs": {
-      "text": "She is nude with glistening skin, one hand resting against the wooden cabinet while the other lifts behind her head, her body slightly angled in a confident standing pose with one leg forward, visible nipples and visible vulva, set in a tiled shower room with light wood flooring."
-    },
-    "class_type": "dw_text",
-    "_meta": {
-      "title": "USER_PROMPT"
-    }
-  },
-  "49": {
-    "inputs": {
-      "attention": "comfy kitchen attention",
-      "model": [
-        "5",
+      "conditioning": [
+        "246",
         0
       ]
     },
-    "class_type": "ModelAttentionBackend",
+    "class_type": "ConditioningZeroOut",
     "_meta": {
-      "title": "Model Attention Backend"
-    }
-  },
-  "50": {
-    "inputs": {
-      "select_model": "DA2-Large-FP16",
-      "imagen": [
-        "17",
-        0
-      ]
-    },
-    "class_type": "dw_depth-anything-2",
-    "_meta": {
-      "title": "dw_depth-anything-2"
-    }
-  },
-  "51": {
-    "inputs": {
-      "input": [
-        "7",
-        0
-      ]
-    },
-    "class_type": "dw_setnode",
-    "_meta": {
-      "title": "model"
+      "title": "Conditioning Zero Out",
+      "cnr_id": "comfy-core",
+      "ver": "0.46.3"
     }
   }
 }

@@ -3,23 +3,23 @@ import json
 import re
 import uuid
 from typing import Literal
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, Query
-from sqlalchemy import delete, func, select
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile, Query
+from sqlalchemy import delete, func, or_, select, update
 from sqlalchemy.orm import Session
 from app.comfy import ComfyClient, ComfyError, validate_url
 from app.creditos.service import balance
 from app.db import database
-from app.models import AppSetting, Audit, CreditEntry, GpuServer, GpuWorkflow, Job, LoginSession, ModelProfile, Output, User, Workflow, now
-from app.schemas import CreditGrant, GpuInput, ModelInput, UserAccess, GenerationSettings
+from app.models import AppSetting, Audit, CreditEntry, GpuServer, GpuWorkflow, Job, LoginSession, ModelProfile, Output, Upload, User, Workflow, now
+from app.schemas import CreditGrant, DeleteConfirm, GpuInput, ModelInput, PasswordReset, ProfileEdit, UserAccess, GenerationSettings
 from app.preferences import generation_settings
-from app.archivos.storage import save_object, signed_url
-from app.security import admin_user, audit, csrf, encrypt, public_user, rate_limit
+from app.archivos.storage import object_path, save_object, signed_url
+from app.security import admin_user, audit, csrf, encrypt, hasher, public_user, rate_limit, section_gate
 from app.trabajos.workflow import validate_graph, named
 from app.trabajos.compatibility import compatibility
 
-router = APIRouter(prefix="/admin", tags=["administracion"], dependencies=[Depends(admin_user)])
+router = APIRouter(prefix="/admin", tags=["administracion"], dependencies=[Depends(section_gate)])
 
-SLOTS = [("generate", "Crear imagen"), ("reference", "Usar referencia")]
+SLOTS = [("generate", "Generación de imagen"), ("reference", "Imagen desde referencia")]
 STATUSES = ("queued", "running", "succeeded", "failed", "canceled")
 
 
@@ -108,11 +108,84 @@ def grant(user_id: uuid.UUID, data: CreditGrant, actor: User = Depends(admin_use
     old = db.scalar(select(CreditEntry).where(CreditEntry.reference == reference))
     if old and old.delta != data.amount:
         raise HTTPException(409, "Esa referencia ya se usó con otra cantidad.")
+    if not data.amount:
+        raise HTTPException(400, "Indica una cantidad distinta de cero.")
     if not old:
-        db.add(CreditEntry(user_id=u.id, delta=data.amount, reason="admin_grant", reference=reference))
+        if data.amount < 0 and balance(db, u.id) + data.amount < 0:
+            raise HTTPException(400, "El usuario no puede quedar con créditos negativos.")
+        db.add(CreditEntry(user_id=u.id, delta=data.amount, reason="admin_grant" if data.amount > 0 else "admin_adjust", reference=reference))
         audit(db, actor, "credit_grant", str(u.id), amount=data.amount, note=data.note)
         db.flush()
     return {"balance": balance(db, u.id)}
+
+
+@router.patch("/users/{user_id}/profile", dependencies=[Depends(csrf)])
+def edit_profile(user_id: uuid.UUID, data: ProfileEdit, actor: User = Depends(admin_user), db: Session = Depends(database, scope="function")):
+    u = db.scalar(select(User).where(User.id == user_id).with_for_update())
+    if not u:
+        raise HTTPException(404, "Usuario no encontrado.")
+    if u.role == "admin":
+        raise HTTPException(400, "Este apartado solo modifica cuentas de miembros.")
+    email = str(data.email).lower() if data.email else None
+    if email and db.scalar(select(User.id).where(User.id != u.id, or_(User.email == email, User.username == email))):
+        raise HTTPException(409, "Ese correo ya está en uso.")
+    u.name, u.email = data.name, email
+    audit(db, actor, "user_profile_edited", str(u.id))
+    return public_user(u)
+
+
+@router.post("/users/{user_id}/password", dependencies=[Depends(csrf)])
+def reset_password(user_id: uuid.UUID, data: PasswordReset, actor: User = Depends(admin_user), db: Session = Depends(database, scope="function")):
+    rate_limit("admin-password", str(actor.id), 10, 900)
+    u = db.scalar(select(User).where(User.id == user_id).with_for_update())
+    if not u:
+        raise HTTPException(404, "Usuario no encontrado.")
+    if u.role == "admin":
+        raise HTTPException(400, "Este apartado solo modifica cuentas de miembros.")
+    u.password_hash = hasher.hash(data.password)
+    db.execute(delete(LoginSession).where(LoginSession.user_id == u.id))
+    audit(db, actor, "user_password_reset", str(u.id))
+    return {"ok": True}
+
+
+def remove_files(keys):
+    for key in keys:
+        try:
+            object_path(key).unlink(missing_ok=True)
+        except (HTTPException, OSError):
+            continue
+
+
+def purge_user(db, u, actor, tasks):
+    if db.scalar(select(func.count()).select_from(Job).where(Job.user_id == u.id, Job.status.in_(["queued", "running"]))):
+        raise HTTPException(409, "Tiene generaciones en curso. Espera a que terminen o se cancelen.")
+    keys = list(db.scalars(select(Output.object_key).where(Output.user_id == u.id))) + list(db.scalars(select(Upload.object_key).where(Upload.user_id == u.id)))
+    jobs = db.scalar(select(func.count()).select_from(Job).where(Job.user_id == u.id))
+    db.execute(delete(CreditEntry).where(CreditEntry.user_id == u.id))
+    db.execute(delete(Output).where(Output.user_id == u.id))
+    db.execute(delete(Job).where(Job.user_id == u.id))
+    db.execute(delete(Upload).where(Upload.user_id == u.id))
+    db.execute(update(Audit).where(Audit.actor_id == u.id).values(actor_id=None))
+    db.execute(delete(LoginSession).where(LoginSession.user_id == u.id))
+    audit(db, actor, "user_deleted", str(u.id), username=u.username, generations=jobs, files=len(keys))
+    db.delete(u)
+    db.flush()
+    tasks.add_task(remove_files, keys)
+    return {"ok": True, "generations": jobs, "files": len(keys)}
+
+
+@router.delete("/users/{user_id}", dependencies=[Depends(csrf)])
+def delete_user(user_id: uuid.UUID, data: DeleteConfirm, tasks: BackgroundTasks, actor: User = Depends(admin_user),
+                db: Session = Depends(database, scope="function")):
+    rate_limit("admin-delete-user", str(actor.id), 10, 900)
+    u = db.scalar(select(User).where(User.id == user_id).with_for_update())
+    if not u:
+        raise HTTPException(404, "Usuario no encontrado.")
+    if u.role == "admin":
+        raise HTTPException(400, "Las cuentas de administrador no se eliminan desde este apartado.")
+    if data.confirm != u.username:
+        raise HTTPException(400, "Escribe el usuario exacto para confirmar.")
+    return purge_user(db, u, actor, tasks)
 
 
 @router.get("/models")
@@ -132,6 +205,16 @@ def save_model(data: ModelInput, actor: User = Depends(admin_user), db: Session 
     for key, value in data.model_dump().items():
         setattr(m, key, value)
     audit(db, actor, "model_saved", data.id)
+    return {"ok": True}
+
+
+@router.delete("/models/{model_id}", dependencies=[Depends(csrf)])
+def delete_model(model_id: str, actor: User = Depends(admin_user), db: Session = Depends(database, scope="function")):
+    m = db.get(ModelProfile, model_id)
+    if not m:
+        raise HTTPException(404, "Personaje no encontrado.")
+    db.delete(m)
+    audit(db, actor, "model_deleted", model_id)
     return {"ok": True}
 
 
@@ -241,7 +324,7 @@ def loras(gpu_id: uuid.UUID, actor: User = Depends(admin_user), db: Session = De
     try:
         info = ComfyClient(g).json("/object_info")
         values = []
-        for workflow in db.scalars(select(Workflow)):
+        for workflow in db.scalars(select(Workflow).where(Workflow.mode == "generate")):
             class_name = named(workflow.graph, "SELECT_CHARACTER")[1]["class_type"]
             schema = info.get(class_name, {}).get("input", {})
             fields = {**schema.get("required", {}), **schema.get("optional", {})}
@@ -251,6 +334,26 @@ def loras(gpu_id: uuid.UUID, actor: User = Depends(admin_user), db: Session = De
         return {"items": sorted({s for s in values if isinstance(s, str)}, key=str.casefold)}
     except ComfyError:
         raise HTTPException(503, "No se pudo obtener la lista de LoRAs.") from None
+
+
+@router.get("/loras")
+def available_loras(actor: User = Depends(admin_user), db: Session = Depends(database, scope="function")):
+    rate_limit("gpu-loras", str(actor.id), 5, 60)
+    servers = db.scalars(select(GpuServer).where(GpuServer.enabled).order_by(GpuServer.healthy.desc(), GpuServer.name)).all()
+    classes = {named(w.graph, "SELECT_CHARACTER")[1]["class_type"] for w in db.scalars(select(Workflow).where(Workflow.mode == "generate"))}
+    for server in servers:
+        try:
+            info = ComfyClient(server).json("/object_info")
+        except ComfyError:
+            continue
+        values = set()
+        for class_name in classes:
+            schema = info.get(class_name, {}).get("input", {})
+            choices = {**schema.get("required", {}), **schema.get("optional", {})}.get("lora_1_name", [[]])[0]
+            if isinstance(choices, list):
+                values.update(s for s in choices if isinstance(s, str) and s != "None")
+        return {"items": sorted(values, key=str.casefold), "server": server.name}
+    raise HTTPException(503, "Ningún servidor respondió. Revisa su conexión en Servidores.")
 
 
 @router.post("/gpus/{gpu_id}/validate/{workflow_id}", dependencies=[Depends(csrf)])
@@ -294,7 +397,7 @@ def generations(status: Literal["queued", "running", "succeeded", "failed", "can
                       "model_name": job.model_name, "workflow_id": job.workflow_id, "mode": job.workflow_mode,
                       "status": job.status, "progress": job.progress, "cost": job.cost, "attempts": job.attempts,
                       "gpu": gpu, "error": job.error_public, "prompt": p.get("prompt", ""), "ratio": p.get("ratio"),
-                      "batch": p.get("batch"), "seed": p.get("seed"), "has_reference": bool(p.get("upload_id")),
+                      "batch": p.get("batch"), "seed": p.get("seed"), "has_reference": bool(p.get("upload_ids")),
                       "created_at": job.created_at, "started_at": job.started_at, "finished_at": job.finished_at,
                       "outputs": outputs.get(job.id, [])})
     return {"items": items, "total": db.scalar(select(func.count()).select_from(Job).where(*where)),

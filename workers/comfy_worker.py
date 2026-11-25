@@ -17,7 +17,7 @@ from app.config import settings
 from app.db import SessionLocal
 from app.models import GpuServer, GpuWorkflow, Job, Output, Upload, now
 from app.trabajos.service import finish
-from app.trabajos.workflow import build_graph, named
+from app.trabajos.workflow import build_graph, finals
 
 log = logging.getLogger("musedouble.worker")
 
@@ -45,6 +45,10 @@ class Worker:
 
     def recover(self):
         with SessionLocal.begin() as db:
+            for gpu in db.scalars(select(GpuServer).where(GpuServer.busy_job_id.is_not(None)).with_for_update(skip_locked=True)).all():
+                status = db.scalar(select(Job.status).where(Job.id == gpu.busy_job_id))
+                if status not in ("running", "queued"):
+                    gpu.busy_job_id = None
             stale = db.scalars(select(Job).where(Job.status == "running",
                 Job.heartbeat_at < now() - timedelta(seconds=settings().worker_lease_seconds)).with_for_update(skip_locked=True)).all()
             for job in stale:
@@ -187,7 +191,7 @@ class Worker:
                 job = db.get(Job, job_id)
                 gpu = db.get(GpuServer, job.gpu_server_id)
                 mode = job.workflow_mode
-                upload = db.get(Upload, uuid.UUID(job.params["upload_id"])) if job.params.get("upload_id") else None
+                uploads = [db.get(Upload, uuid.UUID(i)) for i in job.params.get("upload_ids") or []]
             if job.cancel_requested and job.dispatch_state == "not_sent":
                 with SessionLocal.begin() as db:
                     finish(db, self.fenced(db, job_id), "canceled")
@@ -199,11 +203,9 @@ class Worker:
                 if not prompt_id:
                     raise ComfyError("dispatch_uncertain", False)
             if not prompt_id:
-                reference = None
-                if upload:
-                    reference = client.upload("musedouble-" + str(job.id) + "." + upload.object_key.rsplit(".", 1)[-1],
-                                              object_path(upload.object_key).read_bytes(), upload.mime)
-                graph = build_graph(job.graph, mode, job.model_snapshot, job.params, reference)
+                references = [client.upload("musedouble-" + str(job.id) + "-" + str(n) + "." + upload.object_key.rsplit(".", 1)[-1],
+                                            object_path(upload.object_key).read_bytes(), upload.mime) for n, upload in enumerate(uploads, 1)]
+                graph = build_graph(job.graph, mode, job.model_snapshot, job.params, references)
                 with SessionLocal.begin() as db:
                     self.fenced(db, job_id).dispatch_state = "sending"
                 try:
@@ -274,16 +276,19 @@ class Worker:
             heartbeat.join(timeout=6)
 
     def save_results(self, client, job, entry):
-        final_id = named(job.graph, "FINAL_IMAGE")[0]
-        images = entry.get("outputs", {}).get(final_id, {}).get("images", [])
-        if not isinstance(images, list) or any(not isinstance(i, dict) for i in images):
-            raise ComfyError("invalid_output", False)
+        final_ids = [key for key, _ in finals(job.graph)]
+        images = []
+        for final_id in final_ids:
+            part = entry.get("outputs", {}).get(final_id, {}).get("images", [])
+            if not isinstance(part, list) or any(not isinstance(i, dict) for i in part):
+                raise ComfyError("invalid_output", False)
+            images.extend(part)
         unique = {}
         for item in images:
             descriptor = json.dumps([item.get("filename"), item.get("subfolder", ""), item.get("type", "output")], sort_keys=True)
             unique.setdefault(descriptor, item)
         images = list(unique.values())
-        if len(images) != job.params["batch"]:
+        if len(images) != job.params["batch"] * len(final_ids):
             raise ComfyError("missing_output", False)
         for item in images:
             kind = item.get("type", "output")

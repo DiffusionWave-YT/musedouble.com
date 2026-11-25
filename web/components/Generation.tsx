@@ -1,44 +1,56 @@
 "use client";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { api, type Catalog, type Job } from "../lib/api";
+import { locale, tr } from "../lib/i18n";
 import RatioPicker from "./RatioPicker";
 import { Result } from "./Results";
-import { Action, Empty } from "./ui";
+import { Action, Empty, Icon } from "./ui";
 
-export const statuses: Record<string, string> = { queued: "En cola", running: "Generando", succeeded: "Completado", failed: "No completado", canceled: "Cancelado" };
+const statusNames: Record<string, string> = { queued: "En cola", running: "Generando", succeeded: "Completado", failed: "No completado", canceled: "Cancelado" };
+export const statusName = (status: string) => tr(statusNames[status] ?? status);
+export const displayName = (workflowId: string, name: string) => (workflowId === "reference" ? tr("Imagen desde referencia") : name);
 export const isActive = (job: Job) => job.status === "queued" || job.status === "running";
 
 type Notify = (message: string) => void;
 
+type Reference = { key: string; preview: string; id: string | null };
+
 export function Generation({ mode, catalog, notify, submitted }: { mode: string; catalog: Catalog; notify: Notify; submitted: () => Promise<void> }) {
-  const [uploadId, setUploadId] = useState<string | null>(null);
-  const [uploading, setUploading] = useState(false);
-  const [preview, setPreview] = useState("");
+  const [refs, setRefs] = useState<Reference[]>([]);
+  const [uploading, setUploading] = useState(0);
   const [busy, setBusy] = useState(false);
   const inFlight = useRef(false);
-  const sequence = useRef(0);
   const retry = useRef<{ payload: string; key: string } | null>(null);
-  useEffect(() => () => { if (preview) URL.revokeObjectURL(preview); }, [preview]);
+  const previews = useRef<string[]>([]);
+  useEffect(() => () => { previews.current.forEach(url => URL.revokeObjectURL(url)); }, []);
   const workflow = catalog.workflows.find(w => w.mode === mode);
-  const models = [...catalog.models].sort((a, b) => a.name.localeCompare(b.name, "es"));
+  const reference = mode === "reference";
+  const limit = Math.max(1, workflow?.references ?? 1);
+  const models = [...catalog.models].sort((a, b) => a.name.localeCompare(b.name, locale()));
 
-  async function choose(file: File | undefined) {
-    const seq = ++sequence.current;
-    setUploadId(null);
-    if (!file) { setPreview(""); setUploading(false); return; }
-    setPreview(URL.createObjectURL(file));
-    setUploading(true);
-    const form = new FormData();
-    form.append("file", file);
-    try {
-      const out = await api<{ id: string }>("/uploads", { method: "POST", body: form });
-      if (sequence.current === seq) setUploadId(out.id);
-    } catch (e) {
-      if (sequence.current === seq) { notify((e as Error).message); setPreview(""); }
-    } finally {
-      if (sequence.current === seq) setUploading(false);
-    }
+  async function add(files: FileList | null) {
+    const chosen = Array.from(files ?? []).slice(0, limit - refs.length);
+    if (!chosen.length) return;
+    const added = chosen.map(file => ({ key: crypto.randomUUID(), preview: URL.createObjectURL(file), file }));
+    previews.current.push(...added.map(a => a.preview));
+    setRefs(current => [...current, ...added.map(a => ({ key: a.key, preview: a.preview, id: null }))]);
+    setUploading(n => n + added.length);
+    await Promise.all(added.map(async item => {
+      const form = new FormData();
+      form.append("file", item.file);
+      try {
+        const out = await api<{ id: string }>("/uploads", { method: "POST", body: form });
+        setRefs(current => current.map(r => (r.key === item.key ? { ...r, id: out.id } : r)));
+      } catch (e) {
+        notify((e as Error).message);
+        setRefs(current => current.filter(r => r.key !== item.key));
+      } finally {
+        setUploading(n => n - 1);
+      }
+    }));
   }
+
+  const remove = (key: string) => setRefs(current => current.filter(r => r.key !== key));
 
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -46,19 +58,18 @@ export function Generation({ mode, catalog, notify, submitted }: { mode: string;
     inFlight.current = true;
     setBusy(true);
     const d = new FormData(e.currentTarget);
+    const common = { prompt: d.get("prompt"), ratio: d.get("ratio") || "4:5", resolution: Number(d.get("resolution") || 1920) };
     const payload = JSON.stringify({
       workflow_id: workflow.id,
-      params: {
-        model_id: d.get("model_id"), prompt: d.get("prompt"), batch: Number(d.get("batch")),
-        seed: d.get("seed") ? Number(d.get("seed")) : null, ratio: d.get("ratio") || "4:5",
-        strength: Number(d.get("strength") ?? 0.6), upload_id: mode === "reference" ? uploadId : null,
-      },
+      params: reference
+        ? { ...common, upload_ids: refs.map(r => r.id) }
+        : { ...common, model_id: d.get("model_id"), batch: Number(d.get("batch")), seed: d.get("seed") === "" ? null : Number(d.get("seed")) },
     });
     if (retry.current?.payload !== payload) retry.current = { payload, key: crypto.randomUUID() };
     try {
       const job = await api<Job>("/jobs", { method: "POST", body: payload, headers: { "Idempotency-Key": retry.current!.key } });
       retry.current = null;
-      notify(job.error || "Tu imagen está en cola. Puedes seguir trabajando mientras se genera.");
+      if (job.error) notify(job.error);
       await submitted();
     } catch (error) {
       notify((error as Error).message);
@@ -68,38 +79,54 @@ export function Generation({ mode, catalog, notify, submitted }: { mode: string;
     }
   }
 
-  if (!workflow) return <section className="panel"><Empty title="Esta herramienta todavía no está configurada." text="Un administrador puede instalar su workflow." icon="flujos" /></section>;
+  if (!workflow) return <section className="panel"><Empty title={tr("Esta herramienta todavía no está configurada.")} text={tr("Un administrador puede instalar su workflow.")} icon="flujos" /></section>;
 
   return (
     <section className="panel">
       <form onSubmit={submit}>
-        <label>Modelo
-          <select name="model_id" required defaultValue={models[0]?.id}>{models.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}</select>
-        </label>
-        {mode === "reference" && (
-          <div>
-            <label className="upload-label">Imagen de referencia
-              <input type="file" accept="image/png,image/jpeg,image/webp" onChange={e => choose(e.target.files?.[0])} />
-              <span>JPG, PNG o WebP · hasta 20 MB</span>
+        {reference ? (
+          <fieldset className="references">
+            <legend>{tr("Imágenes de referencia")} <span className="subtle">{refs.length} / {limit}</span></legend>
+            <ul className="reference-grid">
+              {refs.map((r, i) => (
+                <li key={r.key} className="reference-tile">
+                  <img src={r.preview} alt={tr("Referencia {n}", { n: i + 1 })} />
+                  <span className="reference-number">{i + 1}</span>
+                  {!r.id && <span className="reference-state" role="status">{tr("Subiendo…")}</span>}
+                  <button type="button" className="icon-btn reference-remove" aria-label={tr("Quitar referencia {n}", { n: i + 1 })} onClick={() => remove(r.key)}><Icon name="cerrar" /></button>
+                </li>
+              ))}
+              {refs.length < limit && (
+                <li>
+                  <label className="reference-add">
+                    <Icon name="anadir" />
+                    <span>{tr("Añadir imagen")}</span>
+                    <input type="file" multiple={limit - refs.length > 1} accept="image/png,image/jpeg,image/webp" onChange={e => { add(e.target.files); e.target.value = ""; }} />
+                  </label>
+                </li>
+              )}
+            </ul>
+            <span className="subtle">{tr("JPG, PNG o WebP · hasta 20 MB")}</span>
+          </fieldset>
+        ) : (
+          <label>{tr("Modelo")}
+            <select name="model_id" required defaultValue={models[0]?.id}>{models.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}</select>
+          </label>
+        )}
+        <label>{tr("Descripción")}<textarea name="prompt" rows={5} required maxLength={4000} /></label>
+        <RatioPicker ratios={catalog.ratios} resolutions={catalog.resolutions} storageKey={"muse-ratio-" + mode} />
+        {!reference && (
+          <div className="field-pair">
+            <label>{tr("Cantidad")}
+              <select name="batch" defaultValue="1">{Array.from({ length: catalog.max_batch }, (_, i) => <option key={i + 1} value={i + 1}>{i + 1} {i === 0 ? tr("imagen") : tr("imágenes")}</option>)}</select>
             </label>
-            {preview && <img className="reference-preview" src={preview} alt="Referencia seleccionada" />}
-            {uploading && <p role="status">Subiendo referencia…</p>}
+            <label><span>{tr("Semilla")} <span className="subtle">{tr("-1 es aleatoria")}</span></span><input name="seed" type="number" defaultValue={-1} min={-1} max={9007199254740991} required /></label>
           </div>
         )}
-        <label>Descripción<textarea name="prompt" rows={5} required maxLength={4000} /></label>
-        {mode === "reference"
-          ? <label>Influencia de la referencia<input name="strength" type="number" defaultValue={0.6} min={0} max={1} step={0.05} /></label>
-          : <RatioPicker ratios={catalog.ratios} storageKey={"muse-ratio-" + mode} />}
-        <div className="field-pair">
-          <label>Cantidad
-            <select name="batch" defaultValue="1">{Array.from({ length: catalog.max_batch }, (_, i) => <option key={i + 1} value={i + 1}>{i + 1} {i === 0 ? "imagen" : "imágenes"}</option>)}</select>
-          </label>
-          <label><span>Semilla <span className="subtle">opcional</span></span><input name="seed" type="number" min={0} max={9007199254740991} /></label>
-        </div>
-        {!catalog.can_generate && <p className="notice">Tu cuenta está pendiente de autorización para generar.</p>}
-        <p className="subtle">{workflow.cost} {workflow.cost === 1 ? "crédito" : "créditos"} por imagen · {catalog.credits} disponibles</p>
-        <button className="primary" disabled={busy || uploading || !catalog.can_generate || !catalog.models.length || (mode === "reference" && !uploadId)}>
-          <Action icon="imagen">{busy ? "Enviando…" : uploading ? "Subiendo referencia…" : "Generar imagen"}</Action>
+        {!catalog.can_generate && <p className="notice">{tr("Tu cuenta está pendiente de autorización para generar.")}</p>}
+        <p className="subtle">{workflow.cost} {workflow.cost === 1 ? tr("crédito") : tr("créditos")} {reference ? tr("por generación") : tr("por imagen")}</p>
+        <button className="primary" disabled={busy || uploading > 0 || !catalog.can_generate || (!reference && !catalog.models.length) || (reference && !refs.length)}>
+          <Action icon="imagen">{busy ? tr("Enviando…") : uploading ? tr("Subiendo referencia…") : tr("Generar imagen")}</Action>
         </button>
       </form>
     </section>
@@ -113,7 +140,6 @@ export function JobCard({ job, refresh, notify }: { job: Job; refresh: () => Pro
     try {
       await api("/jobs/" + job.id + "/cancel", { method: "POST" });
       await refresh();
-      notify("Cancelación solicitada.");
     } catch (e) {
       notify((e as Error).message);
     } finally {
@@ -122,16 +148,15 @@ export function JobCard({ job, refresh, notify }: { job: Job; refresh: () => Pro
   }
   return (
     <article className="job">
-      <div className="job-heading"><strong>{job.model_name}</strong><span className={"status " + job.status}>{statuses[job.status]}</span></div>
+      <div className="job-heading"><strong>{displayName(job.workflow_id, job.model_name)}</strong><span className={"status " + job.status}>{statusName(job.status)}</span></div>
       {isActive(job) && (
         <>
-          <progress max="100" value={job.progress} aria-label="Progreso de generación" />
-          <p className="subtle">{job.cancel_requested ? "Esperando a que se detenga tu trabajo…" : job.status === "queued" ? "Esperando un turno disponible." : "Tu imagen está tomando forma."}</p>
-          <button className="small" onClick={cancel} disabled={busy || job.cancel_requested}><Action icon="cerrar">Cancelar trabajo</Action></button>
+          <progress max="100" value={job.progress} aria-label={tr("Progreso de generación")} />
+          <button className="small" onClick={cancel} disabled={busy || job.cancel_requested}><Action icon="cerrar">{tr("Cancelar trabajo")}</Action></button>
         </>
       )}
-      {job.error && <p role="status" className="error">{job.error}</p>}
-      <div className="result-grid">{job.outputs.map(o => <Result key={o.id} id={o.id} name={job.model_name} mode={job.workflow_id} />)}</div>
+      {job.error && <p role="status" className="error">{tr(job.error)}</p>}
+      <div className="result-grid">{job.outputs.map(o => <Result key={o.id} id={o.id} name={displayName(job.workflow_id, job.model_name)} mode={job.workflow_id} />)}</div>
     </article>
   );
 }

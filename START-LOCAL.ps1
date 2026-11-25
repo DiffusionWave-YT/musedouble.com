@@ -46,4 +46,5 @@ foreach ($item in $launchers) {
     }
 }
 Write-Host 'Estudio: http://127.0.0.1:3001'
-Write-Host 'Administrador: http://127.0.0.1:3001/control-musedouble/'
+$adminPath = (Get-Content -LiteralPath (Join-Path $PSScriptRoot 'web/.env.local') -ErrorAction SilentlyContinue | Where-Object { $_ -like 'NEXT_PUBLIC_ADMIN_PATH=*' } | Select-Object -First 1) -replace '^NEXT_PUBLIC_ADMIN_PATH=', ''
+Write-Host ('Administrador: http://127.0.0.1:3001/' + $adminPath + '/')

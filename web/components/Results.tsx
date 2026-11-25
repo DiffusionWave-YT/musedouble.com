@@ -1,6 +1,7 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, type SignedUrl } from "../lib/api";
+import { tr } from "../lib/i18n";
 import { Action } from "./ui";
 
 export function useSignedImage(id: string, scope = "") {
@@ -9,7 +10,7 @@ export function useSignedImage(id: string, scope = "") {
   const renewed = useRef(0);
   const load = useCallback(() => api<SignedUrl>(scope + "/outputs/" + id + "/url").then(x => setUrl(x.url)).catch(e => setError(e.message)), [id, scope]);
   useEffect(() => { load(); }, [load]);
-  const failed = () => { if (renewed.current++ < 1) load(); else setError("No se pudo cargar la imagen."); };
+  const failed = () => { if (renewed.current++ < 1) load(); else setError(tr("No se pudo cargar la imagen.")); };
   return { url, error, failed };
 }
 
@@ -25,12 +26,12 @@ export function Result({ id, name, mode }: { id: string; name: string; mode: str
   return (
     <figure className="result">
       {url
-        ? <a href={url} target="_blank" rel="noreferrer"><img src={url} alt={"Imagen creada con " + name} loading="lazy" onError={failed} /></a>
-        : <div className="image-placeholder">{error || "Cargando imagen…"}</div>}
+        ? <a href={url} target="_blank" rel="noreferrer"><img src={url} alt={tr("Imagen creada con {name}", { name })} loading="lazy" onError={failed} /></a>
+        : <div className="image-placeholder">{error || tr("Cargando imagen…")}</div>}
       <figcaption>
         <strong>{name}</strong>
-        <small>{mode === "reference" ? "Imagen de referencia" : "Generación de imagen"}</small>
-        <button className="text-button" onClick={download}><Action icon="descargar">Descargar original</Action></button>
+        <small>{mode === "reference" ? tr("Imagen desde referencia") : tr("Generación de imagen")}</small>
+        <button className="text-button" onClick={download}><Action icon="descargar">{tr("Descargar original")}</Action></button>
         {downloadError && <small className="error" role="alert">{downloadError}</small>}
       </figcaption>
     </figure>

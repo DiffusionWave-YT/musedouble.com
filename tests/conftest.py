@@ -67,13 +67,13 @@ def environment(monkeypatch):
         def entry(self, prompt_id):
             payload = state["prompts"][prompt_id]
             graph = payload["prompt"]
-            final = next(k for k, n in graph.items() if n.get("_meta", {}).get("title") == "FINAL_IMAGE")
+            finals = [k for k, n in graph.items() if str(n.get("_meta", {}).get("title", "")).startswith("FINAL_IMAGE")]
             status = "error" if state["mode"] == "failure" else "success"
-            batch = next(n["inputs"]["value"] for n in graph.values() if n.get("_meta", {}).get("title") == "BATCH_SIZE")
+            batch = next((n["inputs"]["value"] for n in graph.values() if n.get("_meta", {}).get("title") == "BATCH_SIZE"), 1)
             count = 1 if state["partial_batch"] else batch
             return {"prompt": [0, prompt_id, graph, payload.get("extra_data", {})],
                     "status": {"completed": True, "status_str": status},
-                    "outputs": {final: {"images": [{"filename": f"result-{i}.png", "subfolder": "", "type": "temp"} for i in range(count)]}}}
+                    "outputs": {final: {"images": [{"filename": f"result-{final}-{i}.png", "subfolder": "", "type": "temp"} for i in range(count)]} for final in finals}}
         def do_GET(self):
             if self.path == "/system_stats":
                 self.reply({"system": {"os": "test"}})
@@ -123,7 +123,7 @@ def environment(monkeypatch):
     ids = {}
     with sessions.begin() as db:
         for name, role in [("admin_test", "admin"), ("member_one", "member"), ("member_two", "member")]:
-            user = User(id=uuid.uuid4(), username=name, name=name, password_hash=hasher.hash("test-only-long-password"), role=role, can_generate=True)
+            user = User(id=uuid.uuid4(), username=name, name=name, password_hash=hasher.hash("test-only-long-password"), role=role, can_generate=True, owner=name == "admin_test")
             db.add(user)
             db.flush()
             db.add(CreditEntry(user_id=user.id, delta=10, reason="test", reference="test-"+name))

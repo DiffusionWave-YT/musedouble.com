@@ -10,6 +10,7 @@ export type Gallery = components["schemas"]["GalleryOut"];
 export type GalleryItem = components["schemas"]["GalleryItem"];
 export type SignedUrl = components["schemas"]["SignedUrlOut"];
 export type GenerationLimits = components["schemas"]["GenerationSettings"];
+import { tr } from "./i18n";
 let csrf = "";
 export function setCsrf(token:string){csrf=token;}
 export async function api<T>(path:string, options:RequestInit={}):Promise<T>{
@@ -18,6 +19,6 @@ export async function api<T>(path:string, options:RequestInit={}):Promise<T>{
   if(options.method && options.method!=="GET") headers.set("X-CSRF-Token",csrf);
   const r = await fetch("/api/v1"+path,{...options,headers,credentials:"include",cache:"no-store"});
   const data=await r.json();
-  if(!r.ok) throw new Error(typeof data.detail==="string"?data.detail:"No se pudo completar la solicitud.");
+  if(!r.ok) throw new Error(tr(typeof data.detail==="string"?data.detail:"No se pudo completar la solicitud."));
   return data as T;
 }

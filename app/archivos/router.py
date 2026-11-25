@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.db import database
 from app.models import Job, Output, Upload, User, now
-from app.security import csrf, current_user, rate_limit
+from app.security import csrf, current_user, permissions_of, rate_limit
 from app.schemas import GalleryOut, SignedUrlOut
 from app.archivos.storage import inspect_image, save_object, signed_url
 
@@ -18,7 +18,7 @@ router = APIRouter(tags=["archivos"])
 def upload(file: UploadFile, user: User = Depends(current_user), db: Session = Depends(database, scope="function")):
     rate_limit("upload", str(user.id), 20, 60)
     user = db.scalar(select(User).where(User.id == user.id).with_for_update().execution_options(populate_existing=True))
-    if not user.active or not user.can_generate:
+    if not user.active or not user.can_generate or "studio" not in permissions_of(user):
         raise HTTPException(403, "Tu cuenta necesita autorización de generación.")
     data = file.file.read(settings().upload_limit + 1)
     if len(data) > settings().upload_limit:
@@ -52,13 +52,15 @@ ORDERS = {
 
 
 @router.get("/outputs", response_model=GalleryOut)
-def gallery(order: Literal["newest", "oldest", "az", "za"] = "newest", limit: int = Query(40, ge=1, le=100),
+def gallery(order: Literal["newest", "oldest", "az", "za"] = "newest", workflow_id: Literal["generate", "reference"] | None = None, limit: int = Query(40, ge=1, le=100),
             offset: int = Query(0, ge=0, le=10000), user: User = Depends(current_user),
             db: Session = Depends(database, scope="function")):
-    rows = db.execute(select(Output.id, Output.created_at, Job.model_name, Job.workflow_id, Job.params)
-                      .join(Job, Job.id == Output.job_id)
-                      .where(Output.user_id == user.id, Job.status == "succeeded")
-                      .order_by(*ORDERS[order]()).offset(offset).limit(limit)).all()
+    query = (select(Output.id, Output.created_at, Job.model_name, Job.workflow_id, Job.params)
+             .join(Job, Job.id == Output.job_id)
+             .where(Output.user_id == user.id, Job.status == "succeeded"))
+    if workflow_id:
+        query = query.where(Job.workflow_id == workflow_id)
+    rows = db.execute(query.order_by(*ORDERS[order]()).offset(offset).limit(limit)).all()
     items = [{"id": r.id, "name": r.model_name, "workflow_id": r.workflow_id,
               "ratio": r.params.get("ratio"), "created_at": r.created_at} for r in rows]
     return {"items": items, "next_offset": offset + len(rows) if len(rows) == limit else None}

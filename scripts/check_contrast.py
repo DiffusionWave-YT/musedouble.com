@@ -36,7 +36,7 @@ for name, (selector, alpha, tone_key) in themes.items():
     tokens = {k: rgb(v) for k, v in re.findall(r"--([a-z-]+):\s*(#\w{6})", re.search(selector, css).group(1))}
     pairs = [(fg, bg, 4.5) for fg in ["text", "muted", "accent", "error"] for bg in ["bg", "surface", "raised", "selected"]]
     pairs += [("on-accent", "accent", 4.5), ("success", "raised", 4.5), ("success", "surface", 4.5),
-              ("control", "surface", 3), ("muted", "raised", 3), ("bg", "text", 4.5), ("accent", "surface", 3)]
+              ("control", "surface", 3), ("muted", "raised", 3), ("bg", "text", 4.5), ("bg", "error", 4.5), ("accent", "surface", 3)]
     for fg, bg, minimum in pairs:
         value = ratio(tokens[fg], tokens[bg])
         results.append({"theme": name, "foreground": fg, "background": bg, "ratio": round(value, 2), "minimum": minimum, "passed": value >= minimum})

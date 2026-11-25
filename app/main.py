@@ -13,6 +13,9 @@ from app.trabajos.router import router as jobs
 from app.trabajos.stream import router as stream
 from app.archivos.router import router as files
 from app.admin.router import router as admin
+from app.admin.codigos import router as codes
+from app.admin.administradores import router as admins
+from app.creditos.router import router as credits
 
 log = logging.getLogger("musedouble.api")
 app = FastAPI(title="MuseDouble API", version="0.1.0", debug=False,
@@ -21,7 +24,7 @@ app = FastAPI(title="MuseDouble API", version="0.1.0", debug=False,
 app.add_middleware(CORSMiddleware, allow_origins=[settings().web_origin], allow_credentials=True,
                    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
                    allow_headers=["Content-Type", "X-CSRF-Token", "Idempotency-Key"])
-for router in (users, jobs, stream, files, admin):
+for router in (users, jobs, stream, files, admin, codes, admins, credits):
     app.include_router(router, prefix="/api/v1")
 
 
