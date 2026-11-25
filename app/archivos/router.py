@@ -20,6 +20,8 @@ def upload(file: UploadFile, user: User = Depends(current_user), db: Session = D
     user = db.scalar(select(User).where(User.id == user.id).with_for_update().execution_options(populate_existing=True))
     if not user.active or not user.can_generate or "studio" not in permissions_of(user):
         raise HTTPException(403, "Tu cuenta necesita autorización de generación.")
+    if not user.email_verified:
+        raise HTTPException(403, "Confirma tu correo para usar el estudio.")
     data = file.file.read(settings().upload_limit + 1)
     if len(data) > settings().upload_limit:
         raise HTTPException(413, "La imagen supera los 20 MB.")

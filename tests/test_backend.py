@@ -192,9 +192,9 @@ def test_shared_gpu_cancellation_never_interrupts_others(environment):
     assert env["state"]["interrupts"]==0 and credits(c)==10
 
 
-def test_auth_csrf_registration_blocking_and_rate_limit(environment):
+def test_auth_csrf_registration_blocking_and_rate_limit(environment, monkeypatch):
     env=environment;c=env["Client"]()
-    r=c.call("/auth/register","POST",{"username":"new_member","name":"New Member","email":"member@example.com","password":"test-only-long-password"})
+    r=c.signup({"username":"new_member","name":"New Member","email":"member@example.com","password":"test-only-long-password"})
     assert r.status_code==201 and not r.json()["user"]["can_generate"]
     assert enqueue(c).status_code==403
     assert c.client.post("/api/v1/uploads",files={"file":("reference.png",env["image"],"image/png")},headers={"X-CSRF-Token":c.csrf}).status_code==403
@@ -204,6 +204,8 @@ def test_auth_csrf_registration_blocking_and_rate_limit(environment):
     assert admin.call("/admin/users/"+uid,"PATCH",{"active":False,"can_generate":False}).status_code==200
     assert c.call("/jobs").status_code==401
     bad=env["Client"]()
+    from app.config import settings
+    monkeypatch.setattr(settings(), "pow_enabled", False)
     for _ in range(10):
         assert bad.call("/auth/login","POST",{"identity":"nonexistent","password":"wrong"}).status_code==401
     r=bad.call("/auth/login","POST",{"identity":"nonexistent","password":"wrong"})
@@ -504,12 +506,12 @@ def test_admin_panels_list_generations_users_and_slots(environment):
 
 def test_username_and_password_accept_symbols(environment):
     env=environment;c=env["Client"]()
-    r=c.call("/auth/register","POST",{"username":"Ana@Casa!#","name":"Ana","email":"ana@example.com","password":"p@ss w0rd!·ñ€#long"})
+    r=c.signup({"username":"Ana@Casa!#","name":"Ana","email":"ana@example.com","password":"p@ss w0rd!·ñ€#long"})
     assert r.status_code==201 and r.json()["user"]["username"]=="ana@casa!#"
     other=env["Client"]()
     assert other.call("/auth/login","POST",{"identity":"ANA@casa!#","password":"p@ss w0rd!·ñ€#long"}).status_code==200
-    assert env["Client"]().call("/auth/register","POST",{"username":"has space","name":"X","email":"x@example.com","password":"long-enough-password"}).status_code==422
-    clash=env["Client"]().call("/auth/register","POST",{"username":"ana@example.com","name":"Y","email":"y@example.com","password":"long-enough-password"})
+    assert env["Client"]().signup({"username":"has space","name":"X","email":"x@example.com","password":"long-enough-password"}).status_code==422
+    clash=env["Client"]().signup({"username":"ana@example.com","name":"Y","email":"y@example.com","password":"long-enough-password"})
     assert clash.status_code==409
 
 

@@ -50,6 +50,8 @@ def enqueue(db, user, payload, request_key):
     user = db.scalar(select(User).where(User.id == user.id).with_for_update().execution_options(populate_existing=True))
     if not user.active or not user.can_generate or "studio" not in permissions_of(user):
         raise HTTPException(403, "Tu cuenta necesita autorización de generación.")
+    if not user.email_verified:
+        raise HTTPException(403, "Confirma tu correo para usar el estudio.")
     raw = payload.model_dump(mode="json")
     request_hash = hashlib.sha256(json.dumps(raw, sort_keys=True).encode()).hexdigest()
     old = db.scalar(select(Job).where(Job.user_id == user.id, Job.request_key == request_key))

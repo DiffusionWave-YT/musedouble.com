@@ -22,8 +22,17 @@ class User(Base):
     can_generate: Mapped[bool] = mapped_column(Boolean, default=False)
     owner: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
     permissions: Mapped[list] = mapped_column(JSONB, default=list, server_default=text("'[]'::jsonb"))
+    email_verified: Mapped[bool] = mapped_column(Boolean, default=True, server_default=text("true"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
     __table_args__ = (CheckConstraint("role IN ('admin','member')"),)
+
+
+class EmailToken(Base):
+    __tablename__ = "email_tokens"
+    token_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    purpose: Mapped[str] = mapped_column(String(12))
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
 
 
 class LoginSession(Base):

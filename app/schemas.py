@@ -12,6 +12,7 @@ class Input(BaseModel):
 class Login(Input):
     identity: str = Field(min_length=1, max_length=254)
     password: str = Field(min_length=1, max_length=128)
+    captcha: str = Field(default="", max_length=2048)
 
 
 class Register(Input):
@@ -19,6 +20,9 @@ class Register(Input):
     name: str = Field(min_length=1, max_length=120)
     email: EmailStr
     password: str = Field(min_length=10, max_length=128)
+    website: str = Field(default="", max_length=200)
+    form: str = Field(default="", max_length=200)
+    captcha: str = Field(default="", max_length=2048)
 
     @field_validator("username", mode="before")
     @classmethod
@@ -75,6 +79,20 @@ class CodeUpdate(Input):
     max_uses: int = Field(ge=1, le=100000)
     expires_at: datetime | None = None
     note: str = Field(default="", max_length=200)
+
+
+class TokenInput(Input):
+    token: str = Field(min_length=20, max_length=100)
+
+
+class Forgot(Input):
+    identity: str = Field(min_length=1, max_length=254)
+    captcha: str = Field(default="", max_length=2048)
+
+
+class Reset(Input):
+    token: str = Field(min_length=20, max_length=100)
+    password: str = Field(min_length=10, max_length=128)
 
 
 class PasswordChange(Input):
@@ -153,6 +171,7 @@ class UserOut(BaseModel):
     can_generate: bool
     owner: bool = False
     permissions: list[str] = []
+    email_verified: bool = True
 
 
 class SessionOut(BaseModel):

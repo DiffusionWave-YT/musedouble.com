@@ -4,7 +4,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, setCsrf, type Catalog, type Job, type Jobs, type Session } from "../lib/api";
 import { adminAccount, adminBase, adminGroups, allowedSection, studioAccount, studioGroups, studioHome, usersPath } from "../lib/sections";
-import { Account, LoginForm } from "./Access";
+import { Account, LoginForm, Unverified } from "./Access";
 import Administration from "./Administration";
 import Gallery from "./Gallery";
 import { Generation, JobCard, isActive } from "./Generation";
@@ -233,6 +233,7 @@ export default function Studio({ control = false }: { control?: boolean }) {
           <button className="icon-btn" aria-label={tr("Cerrar aviso")} onClick={() => setMessage("")}><Icon name="cerrar" /></button>
         </div>
       )}
+      {!user.email_verified && <Unverified notify={setMessage} />}
       {content}
     </Shell>
   );

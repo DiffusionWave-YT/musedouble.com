@@ -388,3 +388,7 @@ button.danger-outline:hover { background: var(--raised); }
 
 .brand-home { display: inline-block; width: fit-content; }
 .brand-home:hover { text-decoration: none; }
+
+.hp { position: absolute; left: -10000px; top: auto; width: 1px; height: 1px; overflow: hidden; }
+.captcha { min-height: 4rem; }
+.pow { font-size: .8125rem; color: var(--muted); margin: 0; }

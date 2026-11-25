@@ -48,6 +48,9 @@ def environment(monkeypatch):
     monkeypatch.setattr(settings(), "storage", ROOT / "storage/tests" / schema)
     redis_prefix = "test:" + uuid.uuid4().hex + ":"
     monkeypatch.setattr(settings(), "redis_prefix", redis_prefix)
+    monkeypatch.setattr(settings(), "pwned_check", False)
+    monkeypatch.setattr(settings(), "form_min_seconds", 0)
+    monkeypatch.setattr(settings(), "pow_bits", 4)
     handed = []
     monkeypatch.setattr(colas._bridge, "enqueue", lambda job_id: handed.append(job_id))
     image = io.BytesIO()
@@ -149,6 +152,21 @@ def environment(monkeypatch):
             if name:
                 r = self.call("/auth/login", "POST", {"identity": name, "password": "test-only-long-password"})
                 assert r.status_code == 200, r.text
+        def pow(self):
+            import hashlib
+            given = self.client.get("/api/v1/auth/challenge").json()
+            n = 0
+            while True:
+                nonce = format(n, "x")
+                digest = hashlib.sha256((given["challenge"] + ":" + nonce).encode()).digest()
+                bits = int.from_bytes(digest, "big") >> (256 - given["bits"])
+                if bits == 0:
+                    return given["challenge"] + "|" + nonce
+                n += 1
+        def signup(self, data, **extra):
+            form = self.client.get("/api/v1/auth/config").json()["form"]
+            extra.setdefault("captcha", self.pow())
+            return self.call("/auth/register", "POST", {**data, "form": form, **extra})
         def call(self, path, method="GET", data=None, **kwargs):
             headers = kwargs.pop("headers", {})
             if method != "GET":

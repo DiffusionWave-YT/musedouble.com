@@ -9,6 +9,7 @@ from argon2 import PasswordHasher
 from argon2.exceptions import VerificationError, InvalidHashError
 from cryptography.fernet import Fernet
 from app import redis_client
+from app.antiabuso import client_ip
 from app.config import settings
 from app.db import database
 from app.models import Audit, LoginSession, User, now
@@ -64,7 +65,7 @@ def rate_limit(scope: str, key: str, limit: int, seconds: int):
 
 
 def ip_of(request: Request) -> str:
-    return request.client.host if request.client else "unknown"
+    return client_ip(request)
 
 
 def login_session(request: Request, db: Session = Depends(database, scope="function")) -> LoginSession:
@@ -145,4 +146,4 @@ def audit(db: Session, actor: User | None, action: str, target: str = "", **deta
 def public_user(user: User):
     return {"id": str(user.id), "username": user.username, "email": user.email,
             "name": user.name, "role": user.role, "active": user.active, "can_generate": user.can_generate,
-            "owner": user.owner, "permissions": permissions_of(user)}
+            "owner": user.owner, "permissions": permissions_of(user), "email_verified": user.email_verified}

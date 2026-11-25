@@ -13,6 +13,8 @@ router = APIRouter(tags=["creditos"])
 @router.post("/credits/redeem", dependencies=[Depends(csrf)])
 def redeem(data: RedeemInput, user: User = Depends(current_user), db: Session = Depends(database, scope="function")):
     rate_limit("redeem", str(user.id), 10, 900)
+    if not user.email_verified:
+        raise HTTPException(403, "Confirma tu correo para usar el estudio.")
     code = data.code.strip().upper()
     row = db.scalar(select(RedeemCode).where(RedeemCode.code == code).with_for_update())
     if not row:

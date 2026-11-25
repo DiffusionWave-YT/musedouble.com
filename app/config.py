@@ -31,6 +31,20 @@ class Settings(BaseSettings):
     redis_prefix: str = "musedouble:"
     worker_concurrency: int = 4
     requeue_after_seconds: int = 60
+    trusted_proxy: bool = False
+    turnstile_site_key: str = ""
+    turnstile_secret: SecretStr = SecretStr("")
+    pow_enabled: bool = True
+    pow_bits: int = 16
+    pwned_check: bool = True
+    form_min_seconds: int = 3
+    register_per_ip_hour: int = 6
+    register_per_ip_day: int = 15
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_password: SecretStr = SecretStr("")
+    mail_from: str = ""
 
     @field_validator("storage")
     @classmethod
