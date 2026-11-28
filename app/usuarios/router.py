@@ -108,7 +108,7 @@ def register(data: Register, request: Request, response: Response, tasks: Backgr
     email = str(data.email).lower()
     if db.scalar(select(User.id).where(or_(User.username.in_([data.username, email]), User.email.in_([email, data.username])))):
         raise HTTPException(409, "No se puede registrar esa cuenta. Prueba iniciar sesión.")
-    user = User(username=data.username, email=email, name=data.name, password_hash=hasher.hash(data.password), email_verified=not antiabuso.mail_enabled())
+    user = User(username=data.username, email=email, name=data.name, password_hash=hasher.hash(data.password), can_generate=True, email_verified=not antiabuso.mail_enabled())
     db.add(user)
     db.flush()
     db.delete(previous)

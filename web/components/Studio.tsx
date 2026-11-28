@@ -12,7 +12,7 @@ import Shell from "./Shell";
 import { tr, useLang } from "../lib/i18n";
 import { Action, Brand, BrandHome, Empty, Icon, LangToggle } from "./ui";
 
-const streamUrl = () => (window.location.protocol === "https:" ? "wss" : "ws") + "://" + window.location.hostname + ":8010/api/v1/jobs/stream";
+const streamUrl = () => (window.location.protocol === "https:" ? "wss" : "ws") + "://" + (process.env.NODE_ENV === "production" ? window.location.host + "/ws" : window.location.hostname + ":8010/api/v1") + "/jobs/stream";
 
 export default function Studio({ control = false }: { control?: boolean }) {
   useLang();

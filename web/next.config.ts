@@ -22,7 +22,10 @@ const config: NextConfig = {
         { source: "/" + adminPath, destination: "/admin" },
         { source: "/" + adminPath + "/:path*", destination: "/admin/:path*" },
       ],
-      afterFiles: [{ source: "/api/v1/:path*", destination: "http://127.0.0.1:8010/api/v1/:path*" }],
+      afterFiles: [
+        { source: "/api/v1/:path*", destination: "http://127.0.0.1:8010/api/v1/:path*" },
+        { source: "/objects/:path*", destination: "http://127.0.0.1:9011/objects/:path*" },
+      ],
       fallback: [],
     };
   },
@@ -32,7 +35,7 @@ const config: NextConfig = {
       {key:"Referrer-Policy",value:"no-referrer"},
       {key:"X-Frame-Options",value:"DENY"},
       {key:"Permissions-Policy",value:"camera=(), microphone=(), geolocation=()"},
-      {key:"Content-Security-Policy",value:`default-src 'self'; script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com${development?" 'unsafe-eval'":""}; style-src 'self' 'unsafe-inline'; img-src 'self' blob: http://127.0.0.1:9011; frame-src https://challenges.cloudflare.com; connect-src 'self' ws://127.0.0.1:8010${development?" ws://127.0.0.1:3001":""}; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'`}
+      {key:"Content-Security-Policy",value:`default-src 'self'; script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com${development?" 'unsafe-eval'":""}; style-src 'self' 'unsafe-inline'; img-src 'self' blob:${development?" http://127.0.0.1:9011":""}; frame-src https://challenges.cloudflare.com; connect-src 'self'${development?" ws://127.0.0.1:8010 ws://127.0.0.1:3001":""}; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'`}
     ]}];
   }
 };

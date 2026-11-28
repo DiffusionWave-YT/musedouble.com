@@ -259,3 +259,48 @@ def test_login_asks_for_pow_after_repeated_failures(environment):
     assert codes == [401, 401, 403]
     assert other.call("/auth/login", "POST", {"identity": "pwuser", "password": GOOD}).status_code == 403
     assert other.call("/auth/login", "POST", {"identity": "pwuser", "password": GOOD, "captcha": other.pow()}).status_code == 200
+
+
+def fake_socket(resolver):
+    import socket
+    from types import SimpleNamespace
+    return SimpleNamespace(getaddrinfo=resolver, gaierror=socket.gaierror, SOCK_STREAM=socket.SOCK_STREAM)
+
+
+def test_gpu_hosts_accept_public_names_and_block_internal_ones(environment, monkeypatch):
+    import socket
+    from fastapi import HTTPException
+    from app import comfy
+    monkeypatch.setattr(settings(), "allowed_gpu_hosts", "127.0.0.1,localhost")
+    table = {"conector_1.example.ai": "93.184.216.34", "inside.example.ai": "10.0.0.7", "mixed.example.ai": "93.184.216.34,192.168.1.5"}
+
+    def fake(host, port, type=0):
+        if host not in table:
+            raise socket.gaierror("no such host")
+        return [(2, 1, 6, "", (ip, port)) for ip in table[host].split(",")]
+
+    monkeypatch.setattr(comfy, "socket", fake_socket(fake))
+    assert comfy.validate_url("https://conector_1.example.ai/", resolve=True) == "https://conector_1.example.ai"
+    assert comfy.validate_url("http://8.8.8.8:8188") == "http://8.8.8.8:8188"
+    for bad in ("https://inside.example.ai", "https://mixed.example.ai", "http://10.1.2.3:8188", "http://169.254.169.254/x",
+                "http://[::1]:8188", "http://192.168.0.5", "ftp://conector_1.example.ai", "https://user:pw@conector_1.example.ai"):
+        with pytest.raises(HTTPException):
+            comfy.validate_url(bad, resolve=True)
+    with pytest.raises(HTTPException):
+        comfy.validate_url("https://unknown.example.ai", resolve=True)
+    assert comfy.validate_url("http://127.0.0.1:8188", resolve=True) == "http://127.0.0.1:8188"
+
+
+def test_gpu_requests_refuse_hosts_that_turn_private_later(environment, monkeypatch):
+    import socket
+    from types import SimpleNamespace
+    from app import comfy
+    from app.security import encrypt
+    monkeypatch.setattr(settings(), "allowed_gpu_hosts", "localhost")
+    ips = {"value": "93.184.216.34"}
+    monkeypatch.setattr(comfy, "socket", fake_socket(lambda host, port, type=0: [(2, 1, 6, "", (ips["value"], port))]))
+    client = comfy.ComfyClient(SimpleNamespace(url_enc=encrypt("https://rebind.example.ai"), token_enc=None))
+    ips["value"] = "127.0.0.1"
+    with pytest.raises(comfy.ComfyError) as blocked:
+        client.json("/system_stats")
+    assert blocked.value.code == "private_network" and blocked.value.retryable is False

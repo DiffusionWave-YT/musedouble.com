@@ -11,7 +11,7 @@ import Generations from "./Generations";
 
 type Notify = (message: string) => void;
 
-const role = (u: Member) => tr(u.owner ? "Administrador principal" : u.role === "admin" ? (u.active ? "Administrador" : "Cuenta bloqueada") : u.active ? (u.can_generate ? "Cuenta activa" : "Pendiente de autorización") : "Cuenta bloqueada");
+const role = (u: Member) => tr(u.owner ? "Administrador principal" : u.role === "admin" ? (u.active ? "Administrador" : "Cuenta bloqueada") : u.active ? (u.can_generate ? "Cuenta activa" : "Generación pausada") : "Cuenta bloqueada");
 
 type Panel = "delete" | "edit" | null;
 

@@ -214,7 +214,7 @@ export function Account({ user, notify, changed }: { user: User; notify: (messag
       <section className="panel">
         <h2>{user.name}</h2>
         <p className="subtle">{user.username}{user.email ? " · " + user.email : ""}</p>
-        <p>{user.role === "admin" ? tr("Administrador del estudio") : user.can_generate ? tr("Generación habilitada") : tr("Pendiente de autorización de generación")}</p>
+        <p>{user.role === "admin" ? tr("Administrador del estudio") : user.can_generate ? tr("Generación habilitada") : tr("Generación pausada por un administrador")}</p>
       </section>
       <section className="panel">
         <h2>{tr("Canjear código")}</h2>

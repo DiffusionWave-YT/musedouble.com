@@ -195,12 +195,14 @@ def test_shared_gpu_cancellation_never_interrupts_others(environment):
 def test_auth_csrf_registration_blocking_and_rate_limit(environment, monkeypatch):
     env=environment;c=env["Client"]()
     r=c.signup({"username":"new_member","name":"New Member","email":"member@example.com","password":"test-only-long-password"})
-    assert r.status_code==201 and not r.json()["user"]["can_generate"]
-    assert enqueue(c).status_code==403
-    assert c.client.post("/api/v1/uploads",files={"file":("reference.png",env["image"],"image/png")},headers={"X-CSRF-Token":c.csrf}).status_code==403
+    assert r.status_code==201 and r.json()["user"]["can_generate"]
+    assert enqueue(c).status_code==402
     assert c.call("/jobs","POST",params(),headers={"X-CSRF-Token":"bad","Idempotency-Key":uuid.uuid4().hex}).status_code==419
     assert c.call("/jobs","POST",params(),headers={"Origin":"https://evil.example","Idempotency-Key":uuid.uuid4().hex}).status_code==403
     admin=env["Client"]("admin_test");uid=r.json()["user"]["id"]
+    assert admin.call("/admin/users/"+uid,"PATCH",{"active":True,"can_generate":False}).status_code==200
+    assert enqueue(c).status_code==403
+    assert c.client.post("/api/v1/uploads",files={"file":("reference.png",env["image"],"image/png")},headers={"X-CSRF-Token":c.csrf}).status_code==403
     assert admin.call("/admin/users/"+uid,"PATCH",{"active":False,"can_generate":False}).status_code==200
     assert c.call("/jobs").status_code==401
     bad=env["Client"]()

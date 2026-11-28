@@ -265,7 +265,7 @@ def write_gpu(db, gpu, data, actor):
     if gpu.busy_job_id and ((data.url and "•" not in data.url) or data.token is not None or gpu.exclusive != data.exclusive):
         raise HTTPException(409, "Espera a que termine el trabajo antes de cambiar la conexión del servidor.")
     if data.url and "•" not in data.url:
-        gpu.url_enc = encrypt(validate_url(data.url))
+        gpu.url_enc = encrypt(validate_url(data.url, resolve=True))
         gpu.healthy, gpu.last_seen = False, None
     elif not gpu.url_enc:
         raise HTTPException(400, "Introduce la URL del servidor.")

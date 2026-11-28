@@ -26,6 +26,7 @@ app.add_middleware(CORSMiddleware, allow_origins=[settings().web_origin], allow_
                    allow_headers=["Content-Type", "X-CSRF-Token", "Idempotency-Key"])
 for router in (users, jobs, stream, files, admin, codes, admins, credits):
     app.include_router(router, prefix="/api/v1")
+app.include_router(stream, prefix="/ws")
 
 
 @app.get("/health")
